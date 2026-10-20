@@ -17,13 +17,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.content.ContextCompat
+import com.jonygoi.minedroidserver.server.ServerManager
 import com.jonygoi.minedroidserver.theme.*
 import com.jonygoi.minedroidserver.ui.*
 
 enum class AppTab(val title: String, val icon: ImageVector) {
-    DASHBOARD("Painel", Icons.Default.Dashboard),
+    DASHBOARD("Servidores", Icons.Default.Dns),
     CONSOLE("Terminal", Icons.Default.Terminal),
-    CONFIG("Servidor", Icons.Default.Settings),
+    CONFIG("Configurar", Icons.Default.Settings),
     OPTIMIZATION("Otimizar", Icons.Default.Speed)
 }
 
@@ -35,6 +36,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Initialize server registry
+        ServerManager.init(this)
 
         // Check & request notification permission for Foreground Service on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

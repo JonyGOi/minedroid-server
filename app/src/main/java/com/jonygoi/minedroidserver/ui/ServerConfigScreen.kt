@@ -24,22 +24,26 @@ import com.jonygoi.minedroidserver.theme.*
 @Composable
 fun ServerConfigScreen(onSaved: () -> Unit) {
     val context = LocalContext.current
-    val currentConfig by ServerManager.config.collectAsState()
+    val servers by ServerManager.servers.collectAsState()
+    val activeServerId by ServerManager.activeServerId.collectAsState()
+    val currentConfig = remember(servers, activeServerId) { ServerManager.getActiveConfig() }
 
-    var selectedType by remember { mutableStateOf(currentConfig.serverType) }
-    var selectedVersion by remember { mutableStateOf(currentConfig.version) }
-    var ramMb by remember { mutableFloatStateOf(currentConfig.allocatedRamMb.toFloat()) }
-    var enableGeyser by remember { mutableStateOf(currentConfig.enableGeyser) }
-    var enableFloodgate by remember { mutableStateOf(currentConfig.enableFloodgate) }
-    var enableAikar by remember { mutableStateOf(currentConfig.enableAikarFlags) }
-    var onlineMode by remember { mutableStateOf(currentConfig.onlineMode) }
-    var pvp by remember { mutableStateOf(currentConfig.pvp) }
-    var motd by remember { mutableStateOf(currentConfig.motd) }
-    var maxPlayers by remember { mutableIntStateOf(currentConfig.maxPlayers) }
-    var viewDistance by remember { mutableFloatStateOf(currentConfig.viewDistance.toFloat()) }
-    var simulationDistance by remember { mutableFloatStateOf(currentConfig.simulationDistance.toFloat()) }
-    var difficulty by remember { mutableStateOf(currentConfig.difficulty) }
-    var gamemode by remember { mutableStateOf(currentConfig.gamemode) }
+    var serverName by remember(currentConfig) { mutableStateOf(currentConfig.name) }
+    var domainAddress by remember(currentConfig) { mutableStateOf(currentConfig.customDomain) }
+    var selectedType by remember(currentConfig) { mutableStateOf(currentConfig.serverType) }
+    var selectedVersion by remember(currentConfig) { mutableStateOf(currentConfig.version) }
+    var ramMb by remember(currentConfig) { mutableFloatStateOf(currentConfig.allocatedRamMb.toFloat()) }
+    var enableGeyser by remember(currentConfig) { mutableStateOf(currentConfig.enableGeyser) }
+    var enableFloodgate by remember(currentConfig) { mutableStateOf(currentConfig.enableFloodgate) }
+    var enableAikar by remember(currentConfig) { mutableStateOf(currentConfig.enableAikarFlags) }
+    var onlineMode by remember(currentConfig) { mutableStateOf(currentConfig.onlineMode) }
+    var pvp by remember(currentConfig) { mutableStateOf(currentConfig.pvp) }
+    var motd by remember(currentConfig) { mutableStateOf(currentConfig.motd) }
+    var maxPlayers by remember(currentConfig) { mutableIntStateOf(currentConfig.maxPlayers) }
+    var viewDistance by remember(currentConfig) { mutableFloatStateOf(currentConfig.viewDistance.toFloat()) }
+    var simulationDistance by remember(currentConfig) { mutableFloatStateOf(currentConfig.simulationDistance.toFloat()) }
+    var difficulty by remember(currentConfig) { mutableStateOf(currentConfig.difficulty) }
+    var gamemode by remember(currentConfig) { mutableStateOf(currentConfig.gamemode) }
 
     val (totalRam, _) = remember { OptimizationEngine.getDeviceRamInfo(context) }
     val maxSelectableRam = if (totalRam > 1024) (totalRam - 512).toFloat() else 1024f
@@ -55,11 +59,57 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
     ) {
         // Header
         Text(
-            text = "Configurações do Servidor",
+            text = "Configurações: $serverName",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
             color = TextPrimary
         )
+
+        // Nome e Domínio
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Identificação & Endereço Amigável",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MinecraftDiamond
+                )
+
+                OutlinedTextField(
+                    value = serverName,
+                    onValueChange = { serverName = it },
+                    label = { Text("Nome do Servidor") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MinecraftEmerald,
+                        unfocusedBorderColor = MinecraftBorder
+                    )
+                )
+
+                OutlinedTextField(
+                    value = domainAddress,
+                    onValueChange = { domainAddress = it },
+                    label = { Text("Endereço Amigável (Domínio)") },
+                    placeholder = { Text("Ex: meu-mundo.craft.gg ou servidor.local") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MinecraftDiamond,
+                        unfocusedBorderColor = MinecraftBorder
+                    )
+                )
+            }
+        }
 
         // Section: Tipo de Servidor
         Text(
@@ -437,7 +487,9 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
         // Save Button
         Button(
             onClick = {
-                val newConfig = currentConfig.copy(
+                val updatedConfig = currentConfig.copy(
+                    name = serverName.ifBlank { "Servidor Minecraft" },
+                    customDomain = domainAddress.ifBlank { "meu-mundo.craft.gg" },
                     serverType = selectedType,
                     version = selectedVersion,
                     allocatedRamMb = ramMb.toInt(),
@@ -453,7 +505,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     difficulty = difficulty,
                     gamemode = gamemode
                 )
-                ServerManager.updateConfig(newConfig)
+                ServerManager.updateServer(context, updatedConfig)
                 Toast.makeText(context, "Configurações salvas com sucesso!", Toast.LENGTH_SHORT).show()
                 onSaved()
             },

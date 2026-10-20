@@ -27,13 +27,15 @@ import com.jonygoi.minedroidserver.theme.*
 @Composable
 fun OptimizationScreen() {
     val context = LocalContext.current
-    val config by ServerManager.config.collectAsState()
+    val servers by ServerManager.servers.collectAsState()
+    val activeServerId by ServerManager.activeServerId.collectAsState()
+    val config = remember(servers, activeServerId) { ServerManager.getActiveConfig() }
 
     var isIgnoringBattery by remember {
         mutableStateOf(OptimizationEngine.isIgnoringBatteryOptimizations(context))
     }
-    var wakeLockEnabled by remember { mutableStateOf(config.enableWakeLock) }
-    var wifiLockEnabled by remember { mutableStateOf(config.enableWifiLock) }
+    var wakeLockEnabled by remember(config) { mutableStateOf(config.enableWakeLock) }
+    var wifiLockEnabled by remember(config) { mutableStateOf(config.enableWifiLock) }
 
     Column(
         modifier = Modifier
@@ -162,7 +164,7 @@ fun OptimizationScreen() {
                         checked = wakeLockEnabled,
                         onCheckedChange = {
                             wakeLockEnabled = it
-                            ServerManager.updateConfig(config.copy(enableWakeLock = it))
+                            ServerManager.updateServer(context, config.copy(enableWakeLock = it))
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = MinecraftObsidian,
@@ -196,7 +198,7 @@ fun OptimizationScreen() {
                         checked = wifiLockEnabled,
                         onCheckedChange = {
                             wifiLockEnabled = it
-                            ServerManager.updateConfig(config.copy(enableWifiLock = it))
+                            ServerManager.updateServer(context, config.copy(enableWifiLock = it))
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = MinecraftObsidian,
@@ -204,6 +206,43 @@ fun OptimizationScreen() {
                         )
                     )
                 }
+            }
+        }
+
+        // Playit.gg Real Named Domain Tunnel Guide
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MinecraftDiamond, RoundedCornerShape(14.dp))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Endereço Nominal Global (Playit.gg / Craft.gg)",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MinecraftDiamond
+                    )
+                    Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Para ter um endereço nominal gratuito (como 'meuservidor.craft.gg' ou 'amigos.playit.gg') que funcione na internet sem abrir portas no roteador:\n\n" +
+                            "1. Acesse o site gratuito playit.gg e crie sua conta.\n" +
+                            "2. Escolha o seu subdomínio personalizado (ex: 'brasil.craft.gg').\n" +
+                            "3. Digite esse mesmo endereço no campo 'Endereço Amigável' do seu servidor no MineDroid!\n" +
+                            "4. Qualquer amigo seu pode entrar digitando exatamente esse nome no Minecraft, sem IPs numéricos!",
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
             }
         }
 
@@ -233,7 +272,7 @@ fun OptimizationScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Como você já usou o Termux, criamos um script que automatiza 100% da instalação nele: atualiza pacotes, baixa OpenJDK 21, aceita o EULA, aplica as Aikar's Flags e inicia tudo sem você precisar digitar nada!",
+                    text = "Script automatizado para quem quiser rodar direto no Termux: atualiza pacotes, instala OpenJDK 21, aceita o EULA e aplica as Aikar's Flags com 1 toque.",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
@@ -245,7 +284,7 @@ fun OptimizationScreen() {
                         val script = OptimizationEngine.generateTermuxScript(config, "/sdcard/minedroid")
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                         clipboard?.setPrimaryClip(ClipData.newPlainText("Termux Script", script))
-                        Toast.makeText(context, "Script copiado! Abra o Termux e cole para rodar tudo automaticamente.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Script copiado para a área de transferência!", Toast.LENGTH_LONG).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MinecraftGold),
                     shape = RoundedCornerShape(10.dp),
@@ -260,35 +299,6 @@ fun OptimizationScreen() {
                         fontSize = 12.sp
                     )
                 }
-            }
-        }
-
-        // Playit.gg Tunnel Guide (Internet Multiplayer without port forwarding)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Jogar pela Internet (Sem abrir portas no roteador)",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MinecraftDiamond
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Para jogar com amigos fora da sua casa (em redes móveis ou outros Wi-Fi) sem precisar mexer nas portas do roteador:\n\n" +
-                            "1. Crie uma conta gratuita no site playit.gg\n" +
-                            "2. Baixe o túnel Playit ou configure o plugin Playit no servidor\n" +
-                            "3. Ele gera um link como 'meu-servidor.playit.gg' que qualquer amigo seu pode usar para entrar direto!",
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
             }
         }
     }

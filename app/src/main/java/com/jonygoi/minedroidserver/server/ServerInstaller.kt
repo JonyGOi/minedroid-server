@@ -12,14 +12,12 @@ import java.net.URL
 
 object ServerInstaller {
 
-    fun getServerDirectory(context: Context): File {
-        val dir = File(context.filesDir, "minecraft_server")
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+    fun getServerDirectory(context: Context, serverId: String): File {
+        return ServerStorage.getServerDirectory(context, serverId)
     }
 
-    fun getPluginsDirectory(context: Context): File {
-        val dir = File(getServerDirectory(context), "plugins")
+    fun getPluginsDirectory(context: Context, serverId: String): File {
+        val dir = File(getServerDirectory(context, serverId), "plugins")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
@@ -29,7 +27,7 @@ object ServerInstaller {
         config: ServerConfig,
         onProgress: (status: String, progress: Float) -> Unit
     ): Boolean = withContext(Dispatchers.IO) {
-        val serverDir = getServerDirectory(context)
+        val serverDir = getServerDirectory(context, config.id)
         val serverJar = File(serverDir, "server.jar")
 
         try {
@@ -62,7 +60,7 @@ object ServerInstaller {
 
             // 4. Download GeyserMC & Floodgate if crossplay is enabled
             if (config.enableGeyser && config.serverType.isJava) {
-                val pluginsDir = getPluginsDirectory(context)
+                val pluginsDir = getPluginsDirectory(context, config.id)
                 val geyserJar = File(pluginsDir, "Geyser-Spigot.jar")
 
                 if (!geyserJar.exists() || geyserJar.length() < 1024) {
@@ -121,7 +119,6 @@ object ServerInstaller {
         return when (config.serverType) {
             ServerType.PAPER -> {
                 try {
-                    // Fetch PaperMC build list
                     val buildsApi = "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds"
                     val jsonStr = httpGet(buildsApi) ?: return null
                     val json = JSONObject(jsonStr)
@@ -143,7 +140,6 @@ object ServerInstaller {
                 "https://api.purpurmc.org/v2/purpur/${config.version}/latest/download"
             }
             ServerType.VANILLA -> {
-                // Mojang paper / vanilla fallback
                 "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds"
             }
             else -> {

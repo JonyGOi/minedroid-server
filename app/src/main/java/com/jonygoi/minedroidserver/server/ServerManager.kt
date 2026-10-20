@@ -59,11 +59,14 @@ data class ServerStats(
 object ServerManager {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    private val _servers = MutableStateFlow<List<ServerConfig>>(emptyList())
+    val servers: StateFlow<List<ServerConfig>> = _servers.asStateFlow()
+
+    private val _activeServerId = MutableStateFlow<String>("")
+    val activeServerId: StateFlow<String> = _activeServerId.asStateFlow()
+
     private val _state = MutableStateFlow(ServerState.STOPPED)
     val state: StateFlow<ServerState> = _state.asStateFlow()
-
-    private val _config = MutableStateFlow(ServerConfig())
-    val config: StateFlow<ServerConfig> = _config.asStateFlow()
 
     private val _logs = MutableStateFlow<List<LogMessage>>(emptyList())
     val logs: StateFlow<List<LogMessage>> = _logs.asStateFlow()
@@ -75,9 +78,66 @@ object ServerManager {
     val downloadProgress: StateFlow<Pair<String, Float>> = _downloadProgress.asStateFlow()
 
     private var processRunner: ProcessRunner? = null
+    private var initialized = false
 
-    fun updateConfig(newConfig: ServerConfig) {
-        _config.value = newConfig
+    fun init(context: Context) {
+        if (initialized) return
+        initialized = true
+        val loaded = ServerStorage.loadServers(context)
+        _servers.value = loaded
+        if (loaded.isNotEmpty()) {
+            _activeServerId.value = loaded.first().id
+        }
+    }
+
+    fun getActiveConfig(): ServerConfig {
+        return _servers.value.find { it.id == _activeServerId.value }
+            ?: _servers.value.firstOrNull()
+            ?: ServerConfig()
+    }
+
+    fun selectServer(id: String) {
+        if (_state.value == ServerState.STOPPED || _state.value == ServerState.ERROR) {
+            _activeServerId.value = id
+        }
+    }
+
+    fun createServer(context: Context, newConfig: ServerConfig) {
+        val current = _servers.value.toMutableList()
+        current.add(newConfig)
+        _servers.value = current
+        _activeServerId.value = newConfig.id
+        ServerStorage.saveServers(context, current)
+    }
+
+    fun updateServer(context: Context, updated: ServerConfig) {
+        val current = _servers.value.toMutableList()
+        val index = current.indexOfFirst { it.id == updated.id }
+        if (index != -1) {
+            current[index] = updated
+            _servers.value = current
+            ServerStorage.saveServers(context, current)
+        }
+    }
+
+    fun deleteServer(context: Context, id: String) {
+        if (_activeServerId.value == id && (_state.value != ServerState.STOPPED && _state.value != ServerState.ERROR)) {
+            return
+        }
+        val current = _servers.value.toMutableList()
+        current.removeAll { it.id == id }
+        ServerStorage.deleteServerDirectory(context, id)
+
+        if (current.isEmpty()) {
+            val defaultServer = ServerConfig(name = "Servidor Principal")
+            current.add(defaultServer)
+        }
+
+        _servers.value = current
+        if (_activeServerId.value == id) {
+            _activeServerId.value = current.first().id
+        }
+        ServerStorage.saveServers(context, current)
     }
 
     fun addLog(msg: LogMessage) {
@@ -95,10 +155,14 @@ object ServerManager {
         _logs.value = emptyList()
     }
 
-    fun startServer(context: Context) {
+    fun startServer(context: Context, targetServerId: String? = null) {
         if (_state.value != ServerState.STOPPED && _state.value != ServerState.ERROR) return
 
-        val cfg = _config.value
+        if (targetServerId != null) {
+            _activeServerId.value = targetServerId
+        }
+
+        val cfg = getActiveConfig()
 
         // Start Foreground Service
         val serviceIntent = Intent(context, MinecraftServerService::class.java).apply {
@@ -112,7 +176,7 @@ object ServerManager {
 
         scope.launch {
             _state.value = ServerState.PREPARING
-            addLog(LogMessage("[MineDroid] Preparando servidor...", LogType.SYSTEM))
+            addLog(LogMessage("[MineDroid] Preparando servidor '${cfg.name}'...", LogType.SYSTEM))
 
             val prepared = ServerInstaller.prepareServerFiles(context, cfg) { status, progress ->
                 _downloadProgress.value = status to progress

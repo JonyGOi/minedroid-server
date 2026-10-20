@@ -31,7 +31,8 @@ class MinecraftServerService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 acquireLocks()
-                startForeground(NOTIFICATION_ID, buildNotification("Servidor Minecraft Iniciando..."))
+                val serverName = ServerManager.getActiveConfig().name
+                startForeground(NOTIFICATION_ID, buildNotification("Servidor '$serverName' Ativo"))
             }
             ACTION_STOP -> {
                 releaseLocks()
@@ -44,7 +45,7 @@ class MinecraftServerService : Service() {
 
     @Suppress("DEPRECATION")
     private fun acquireLocks() {
-        val config = ServerManager.config.value
+        val config = ServerManager.getActiveConfig()
 
         if (config.enableWakeLock && wakeLock == null) {
             val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager

@@ -25,7 +25,7 @@ class ProcessRunner(
         runnerScope?.launch {
             try {
                 onStateChange(ServerState.STARTING)
-                val serverDir = ServerInstaller.getServerDirectory(context)
+                val serverDir = ServerInstaller.getServerDirectory(context, config.id)
                 val jarFile = File(serverDir, "server.jar")
 
                 // Locate Java binary
@@ -50,7 +50,11 @@ class ProcessRunner(
                 }
 
                 onLog(LogMessage(
-                    text = "[MineDroid] Iniciando processo: ${command.first()} com ${config.allocatedRamMb}MB...",
+                    text = "[MineDroid] Servidor '${config.name}' iniciando com ${config.allocatedRamMb}MB...",
+                    type = LogType.SYSTEM
+                ))
+                onLog(LogMessage(
+                    text = "[MineDroid] Endereço amigável: ${config.friendlyJavaAddress}",
                     type = LogType.SYSTEM
                 ))
 
