@@ -109,19 +109,28 @@ fun DashboardScreen(
                         playitLiveStatus = "Agente detectado! Clique em 'Add Agent' na página..."
                     }
                     PlayitClaimStatus.ACCEPTED -> {
-                        playitLiveStatus = "Autorizado com sucesso! Salvando credenciais..."
+                        playitLiveStatus = "Autorizado com sucesso! Conectando agente..."
                         if (!secret.isNullOrBlank()) {
                             PlayitManager.saveSecretKey(context, secret)
+                            PlayitTunnelProcess.start(
+                                context = context,
+                                onLog = { msg -> ServerManager.addLog(msg) },
+                                onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                            )
                             playitSessionToConfirm = null
-                            Toast.makeText(
-                                context,
-                                "Conta Playit.gg vinculada com sucesso! Seus servidores agora terão domínios nominais gratuitos.",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            try {
+                                Toast.makeText(
+                                    context,
+                                    "Conta Playit.gg vinculada com sucesso! Agente conectado.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } catch (_: Exception) {}
                         }
                     }
                     PlayitClaimStatus.REJECTED -> {
-                        Toast.makeText(context, "Vinculação cancelada no navegador.", Toast.LENGTH_SHORT).show()
+                        try {
+                            Toast.makeText(context, "Vinculação cancelada no navegador.", Toast.LENGTH_SHORT).show()
+                        } catch (_: Exception) {}
                         playitSessionToConfirm = null
                     }
                     PlayitClaimStatus.ERROR -> {}
@@ -211,8 +220,15 @@ fun DashboardScreen(
                         Button(
                             onClick = {
                                 PlayitManager.saveSecretKey(context, manualPlayitInput)
+                                PlayitTunnelProcess.start(
+                                    context = context,
+                                    onLog = { msg -> ServerManager.addLog(msg) },
+                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                )
                                 playitSessionToConfirm = null
-                                Toast.makeText(context, "Secret Key do Playit salva com sucesso!", Toast.LENGTH_SHORT).show()
+                                try {
+                                    Toast.makeText(context, "Secret Key salva! Agente conectando ao Playit.gg...", Toast.LENGTH_SHORT).show()
+                                } catch (_: Exception) {}
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
                             shape = RoundedCornerShape(8.dp),
@@ -227,15 +243,25 @@ fun DashboardScreen(
                 Button(
                     onClick = {
                         coroutineScope.launch {
-                            isExchangingPlayit = true
-                            val secret = PlayitManager.exchangeClaim(session.code)
-                            isExchangingPlayit = false
-                            if (!secret.isNullOrBlank()) {
-                                PlayitManager.saveSecretKey(context, secret)
-                                playitSessionToConfirm = null
-                                Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "Ainda aguardando autorização no site. Clique em 'Add Agent' na página.", Toast.LENGTH_SHORT).show()
+                            try {
+                                isExchangingPlayit = true
+                                val secret = PlayitManager.exchangeClaim(session.code)
+                                isExchangingPlayit = false
+                                if (!secret.isNullOrBlank()) {
+                                    PlayitManager.saveSecretKey(context, secret)
+                                    PlayitTunnelProcess.start(
+                                        context = context,
+                                        onLog = { msg -> ServerManager.addLog(msg) },
+                                        onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                    )
+                                    playitSessionToConfirm = null
+                                    Toast.makeText(context, "Conta Playit.gg vinculada! Agente conectando...", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "Ainda aguardando autorização no site. Clique em 'Add Agent' na página.", Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                isExchangingPlayit = false
+                                Toast.makeText(context, "Erro ao confirmar: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },

@@ -124,12 +124,14 @@ object ServerManager {
     }
 
     fun updateActiveServerDomain(domain: String) {
-        val active = getActiveConfig() ?: return
-        if (active.customDomain != domain) {
-            val updated = active.copy(customDomain = domain)
-            appContext?.let { ctx ->
-                updateServer(ctx, updated)
-                PlayitManager.saveLastKnownDomain(ctx, domain)
+        scope.launch(Dispatchers.Main) {
+            val active = getActiveConfig() ?: return@launch
+            if (active.customDomain != domain) {
+                val updated = active.copy(customDomain = domain)
+                appContext?.let { ctx ->
+                    updateServer(ctx, updated)
+                    PlayitManager.saveLastKnownDomain(ctx, domain)
+                }
             }
         }
     }

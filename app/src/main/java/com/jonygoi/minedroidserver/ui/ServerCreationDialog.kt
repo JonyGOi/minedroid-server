@@ -316,11 +316,14 @@ fun ServerCreationDialog(
                                                     claimLiveStatus = "Agente detectado! Clique em 'Add Agent' na página..."
                                                 }
                                                 PlayitClaimStatus.ACCEPTED -> {
-                                                    claimLiveStatus = "Autorizado com sucesso! Salvando credenciais..."
+                                                    claimLiveStatus = "Autorizado com sucesso! Conectando agente..."
                                                     if (!secret.isNullOrBlank()) {
                                                         manualSecretKey = secret
                                                         activeClaimCode = null
                                                         activeClaimUrl = null
+                                                        try {
+                                                            Toast.makeText(context, "Conta Playit.gg vinculada com sucesso! Agente conectado.", Toast.LENGTH_LONG).show()
+                                                        } catch (_: Exception) {}
                                                     }
                                                 }
                                                 PlayitClaimStatus.REJECTED -> {
@@ -346,24 +349,34 @@ fun ServerCreationDialog(
                                                 Text(claimLiveStatus, color = MinecraftDiamond, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                             }
                                             Text(
-                                                text = "O app está mantendo conexão constante com o site. Quando você clicar em 'Add Agent' na página, ele autorizará sozinho!",
+                                                text = "O app está mantendo conexão constante com o site. Quando você clicar em 'Add Agent' na página, ele autorizará sozinho e conectará o agente!",
                                                 fontSize = 10.sp,
                                                 color = TextSecondary
                                             )
                                             Button(
                                                 onClick = {
                                                     coroutineScope.launch {
-                                                        claimLoading = true
-                                                        val secret = PlayitManager.exchangeClaim(code)
-                                                        claimLoading = false
-                                                        if (!secret.isNullOrBlank()) {
-                                                            PlayitManager.saveSecretKey(context, secret)
-                                                            manualSecretKey = secret
-                                                            activeClaimCode = null
-                                                            activeClaimUrl = null
-                                                            Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_LONG).show()
-                                                        } else {
-                                                            Toast.makeText(context, "Ainda não confirmado no navegador. Clique em 'Add Agent' na página primeiro.", Toast.LENGTH_SHORT).show()
+                                                        try {
+                                                            claimLoading = true
+                                                            val secret = PlayitManager.exchangeClaim(code)
+                                                            claimLoading = false
+                                                            if (!secret.isNullOrBlank()) {
+                                                                PlayitManager.saveSecretKey(context, secret)
+                                                                PlayitTunnelProcess.start(
+                                                                    context = context,
+                                                                    onLog = { msg -> ServerManager.addLog(msg) },
+                                                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                                                )
+                                                                manualSecretKey = secret
+                                                                activeClaimCode = null
+                                                                activeClaimUrl = null
+                                                                Toast.makeText(context, "Conta Playit.gg vinculada! Agente conectado.", Toast.LENGTH_LONG).show()
+                                                            } else {
+                                                                Toast.makeText(context, "Ainda não confirmado no navegador. Clique em 'Add Agent' na página primeiro.", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            claimLoading = false
+                                                            Toast.makeText(context, "Erro: ${e.message}", Toast.LENGTH_SHORT).show()
                                                         }
                                                     }
                                                 },

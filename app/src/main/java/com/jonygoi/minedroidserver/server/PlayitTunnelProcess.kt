@@ -64,6 +64,9 @@ object PlayitTunnelProcess {
                 env["HOME"] = playitDir.absolutePath
                 val tmpDir = File(context.filesDir, "tmp").apply { mkdirs() }
                 env["TMPDIR"] = tmpDir.absolutePath
+                val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
+                env["LD_LIBRARY_PATH"] = "${nativeLibDir.absolutePath}:/system/lib64:/system/lib"
+                env["PATH"] = "/system/bin:/system/xbin"
 
                 val proc = pb.start()
                 process = proc

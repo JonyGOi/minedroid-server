@@ -164,16 +164,46 @@ object PlayitManager {
                         val secret = exchangeClaim(code)
                         if (!secret.isNullOrBlank()) {
                             saveSecretKey(context, secret)
-                            onStatusChange(PlayitClaimStatus.ACCEPTED, secret)
+
+                            // Conecta imediatamente o agente nativo libplayit para responder à tela "Looking for your agent..." do Playit.gg
+                            try {
+                                PlayitTunnelProcess.start(
+                                    context = context,
+                                    onLog = { msg -> ServerManager.addLog(msg) },
+                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                )
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+
+                            withContext(Dispatchers.Main) {
+                                try {
+                                    onStatusChange(PlayitClaimStatus.ACCEPTED, secret)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
                             break
                         }
                     }
                     PlayitClaimStatus.REJECTED -> {
-                        onStatusChange(PlayitClaimStatus.REJECTED, null)
+                        withContext(Dispatchers.Main) {
+                            try {
+                                onStatusChange(PlayitClaimStatus.REJECTED, null)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
                         break
                     }
                     else -> {
-                        onStatusChange(status, null)
+                        withContext(Dispatchers.Main) {
+                            try {
+                                onStatusChange(status, null)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
                     }
                 }
                 delay(1500)
