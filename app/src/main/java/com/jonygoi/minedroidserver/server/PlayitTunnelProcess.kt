@@ -9,19 +9,24 @@ import java.io.InputStreamReader
 object PlayitTunnelProcess {
     private var process: Process? = null
     private var processScope: CoroutineScope? = null
+    @Volatile
+    private var isStarting: Boolean = false
 
-    fun isRunning(): Boolean = process?.isAlive == true
+    fun isRunning(): Boolean = isStarting || (process?.isAlive == true)
 
+    @Synchronized
     fun start(
         context: Context,
-        onLog: (LogMessage) -> Unit,
-        onDomainFound: (String) -> Unit
+        onLog: (LogMessage) -> Unit = {},
+        onDomainFound: (String) -> Unit = {}
     ) {
         if (isRunning()) return
+        isStarting = true
 
         val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
         if (!playitBin.exists() || playitBin.length() == 0L) {
             onLog(LogMessage("[Playit.gg] Binário nativo libplayit.so não encontrado no app.", LogType.WARN))
+            isStarting = false
             return
         }
 
@@ -51,10 +56,9 @@ object PlayitTunnelProcess {
 
                 val cmd = mutableListOf<String>()
                 cmd.add(playitBin.absolutePath)
-                cmd.add("--secret-path")
+                // Usamos a flag -s oficial do playit-cli apontando para o arquivo playit.toml
+                cmd.add("-s")
                 cmd.add(playitToml.absolutePath)
-                cmd.add("--stdout")
-                cmd.add("start")
 
                 val pb = ProcessBuilder(cmd)
                 pb.directory(playitDir)
@@ -70,6 +74,7 @@ object PlayitTunnelProcess {
 
                 val proc = pb.start()
                 process = proc
+                isStarting = false
 
                 val reader = BufferedReader(InputStreamReader(proc.inputStream))
                 var line: String?
@@ -107,6 +112,7 @@ object PlayitTunnelProcess {
                     if (cleanMsg.contains("tunnel running", ignoreCase = true) ||
                         cleanMsg.contains("tunnels registered", ignoreCase = true) ||
                         cleanMsg.contains("connected to", ignoreCase = true) ||
+                        cleanMsg.contains("registered", ignoreCase = true) ||
                         cleanMsg.contains("error", ignoreCase = true)) {
                         onLog(LogMessage("[Playit.gg] $cleanMsg", LogType.INFO))
                     }
@@ -115,6 +121,7 @@ object PlayitTunnelProcess {
                 val exitCode = proc.waitFor()
                 onLog(LogMessage("[Playit.gg] Processo de túnel finalizado com código $exitCode", LogType.SYSTEM))
             } catch (e: Exception) {
+                isStarting = false
                 onLog(LogMessage("[Playit.gg] Erro ao iniciar processo de túnel: ${e.message}", LogType.ERROR))
             } finally {
                 cleanup()
@@ -130,6 +137,7 @@ object PlayitTunnelProcess {
     }
 
     private fun cleanup() {
+        isStarting = false
         process = null
         processScope?.cancel()
         processScope = null

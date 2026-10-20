@@ -190,6 +190,9 @@ class ProcessRunner(
     private fun handleServerOutput(msg: String) {
         val cleanMsg = stripAnsi(msg)
         val type = when {
+            cleanMsg.contains("NetherNet support", ignoreCase = true) ||
+            cleanMsg.contains("starting October 27th", ignoreCase = true) ||
+            cleanMsg.contains("preparing-for-nethernet", ignoreCase = true) -> LogType.WARN
             cleanMsg.contains("ERROR", ignoreCase = true) || cleanMsg.contains("Exception") -> LogType.ERROR
             cleanMsg.contains("WARN", ignoreCase = true) -> LogType.WARN
             cleanMsg.contains("Done (", ignoreCase = true) ||
