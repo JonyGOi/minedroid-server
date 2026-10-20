@@ -40,9 +40,13 @@ object PlayitTunnelProcess {
         // Se o usuário já tiver uma chave salva nas preferências, escreve no playit.toml
         val savedSecret = PlayitManager.getSavedSecretKey(context)
         if (!savedSecret.isNullOrBlank()) {
+            val tomlContent = buildString {
+                appendLine("secret = \"$savedSecret\"")
+                appendLine("secret_key = \"$savedSecret\"")
+            }
             if (!playitToml.exists() || !playitToml.readText().contains(savedSecret)) {
                 try {
-                    playitToml.writeText("secret = \"$savedSecret\"\n")
+                    playitToml.writeText(tomlContent)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -56,9 +60,11 @@ object PlayitTunnelProcess {
 
                 val cmd = mutableListOf<String>()
                 cmd.add(playitBin.absolutePath)
-                // Usamos a flag -s oficial do playit-cli apontando para o arquivo playit.toml
+                // Flags de root: -s aponta para o playit.toml, --stdout ativa logs do agente, e 'start' inicia o túnel
                 cmd.add("-s")
                 cmd.add(playitToml.absolutePath)
+                cmd.add("--stdout")
+                cmd.add("start")
 
                 val pb = ProcessBuilder(cmd)
                 pb.directory(playitDir)
@@ -81,7 +87,8 @@ object PlayitTunnelProcess {
 
                 while (reader.readLine().also { line = it } != null) {
                     val rawMsg = line ?: continue
-                    val cleanMsg = stripAnsi(rawMsg)
+                    val cleanMsg = stripAnsi(rawMsg).trim()
+                    if (cleanMsg.isBlank()) continue
 
                     // 1. Detectar link de reivindicação / login automático (caso ainda não autenticado)
                     val claimMatch = Regex("""https://playit\.gg/claim/([a-zA-Z0-9]+)""").find(cleanMsg)
@@ -99,7 +106,7 @@ object PlayitTunnelProcess {
                         try {
                             if (playitToml.exists()) {
                                 val content = playitToml.readText()
-                                val secretMatch = Regex("""secret\s*=\s*\"([^\"]+)\"""").find(content)
+                                val secretMatch = Regex("""(?:secret|secret_key)\s*=\s*\"([^\"]+)\"""").find(content)
                                 if (secretMatch != null) {
                                     val secret = secretMatch.groupValues[1]
                                     PlayitManager.saveSecretKey(context, secret)
@@ -108,18 +115,25 @@ object PlayitTunnelProcess {
                         } catch (_: Exception) {}
                     }
 
-                    // 3. Filtrar mensagens relevantes de túnel para o console do servidor
-                    if (cleanMsg.contains("tunnel running", ignoreCase = true) ||
-                        cleanMsg.contains("tunnels registered", ignoreCase = true) ||
-                        cleanMsg.contains("connected to", ignoreCase = true) ||
+                    // 3. Exibir mensagens de túnel no console do servidor com categorização adequada
+                    val type = when {
+                        cleanMsg.contains("error", ignoreCase = true) || cleanMsg.contains("failed", ignoreCase = true) -> LogType.ERROR
+                        cleanMsg.contains("warn", ignoreCase = true) -> LogType.WARN
+                        cleanMsg.contains("tunnel running", ignoreCase = true) ||
+                        cleanMsg.contains("connected", ignoreCase = true) ||
                         cleanMsg.contains("registered", ignoreCase = true) ||
-                        cleanMsg.contains("error", ignoreCase = true)) {
-                        onLog(LogMessage("[Playit.gg] $cleanMsg", LogType.INFO))
+                        cleanMsg.contains("agent has", ignoreCase = true) -> LogType.SYSTEM
+                        else -> LogType.INFO
                     }
+                    onLog(LogMessage("[Playit.gg] $cleanMsg", type))
                 }
 
                 val exitCode = proc.waitFor()
-                onLog(LogMessage("[Playit.gg] Processo de túnel finalizado com código $exitCode", LogType.SYSTEM))
+                if (exitCode != 0) {
+                    onLog(LogMessage("[Playit.gg] Processo de túnel finalizado com código $exitCode", LogType.WARN))
+                } else {
+                    onLog(LogMessage("[Playit.gg] Processo de túnel finalizado normalmente", LogType.INFO))
+                }
             } catch (e: Exception) {
                 isStarting = false
                 onLog(LogMessage("[Playit.gg] Erro ao iniciar processo de túnel: ${e.message}", LogType.ERROR))

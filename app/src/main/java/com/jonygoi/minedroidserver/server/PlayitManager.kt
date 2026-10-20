@@ -44,7 +44,11 @@ object PlayitManager {
         try {
             val playitDir = File(context.filesDir, "playit").apply { mkdirs() }
             val playitToml = File(playitDir, "playit.toml")
-            playitToml.writeText("secret = \"$secretKey\"\n")
+            val tomlText = buildString {
+                appendLine("secret = \"$secretKey\"")
+                appendLine("secret_key = \"$secretKey\"")
+            }
+            playitToml.writeText(tomlText)
         } catch (e: Exception) {
             e.printStackTrace()
         }
