@@ -31,44 +31,77 @@ class ProcessRunner(
                 val prootBin = InternalRuntimeManager.getPRootBinary(context)
                 val rootfsDir = InternalRuntimeManager.getRootfsDirectory(context)
                 val fakeProc = InternalRuntimeManager.ensureFakeProcFiles(context)
-                val tmpDir = File(context.filesDir, "tmp").apply { mkdirs() }
+                val tmpDir = File(context.filesDir, "tmp").apply {
+                    mkdirs()
+                    try {
+                        setWritable(true, false)
+                        setReadable(true, false)
+                        setExecutable(true, false)
+                    } catch (_: Exception) {}
+                }
+                val l2sDir = File(context.filesDir, "l2s").apply {
+                    mkdirs()
+                    try {
+                        setWritable(true, false)
+                        setReadable(true, false)
+                        setExecutable(true, false)
+                    } catch (_: Exception) {}
+                }
+
+                // Verificações essenciais de ambiente
+                if (!prootBin.exists()) {
+                    onLog(LogMessage("[MineDroid] ERRO CRÍTICO: Binário nativo libproot.so não encontrado em:", LogType.ERROR))
+                    onLog(LogMessage("[MineDroid] ${prootBin.absolutePath}", LogType.ERROR))
+                    onLog(LogMessage("[MineDroid] O Android não extraiu as bibliotecas nativas. Reinstale o APK v1.6.0.", LogType.ERROR))
+                    onStateChange(ServerState.ERROR)
+                    return@launch
+                }
+
+                if (!InternalRuntimeManager.isRuntimeInstalled(context)) {
+                    onLog(LogMessage("[MineDroid] ERRO CRÍTICO: OpenJDK 17 interno não encontrado no sandbox!", LogType.ERROR))
+                    onLog(LogMessage("[MineDroid] A inicialização do motor Java falhou. Tente iniciar o servidor novamente para concluir o download.", LogType.ERROR))
+                    onStateChange(ServerState.ERROR)
+                    return@launch
+                }
+
+                onLog(LogMessage("[MineDroid] Executando com Motor OpenJDK 17 Integrado via PRoot nativo...", LogType.SYSTEM))
 
                 val jvmArgs = OptimizationEngine.buildJvmArgs(config)
                 val command = mutableListOf<String>()
 
-                if (InternalRuntimeManager.isRuntimeInstalled(context) && prootBin.exists()) {
-                    onLog(LogMessage("[MineDroid] Executando com Motor OpenJDK 17 Integrado (100% no App)...", LogType.SYSTEM))
-                    command.add(prootBin.absolutePath)
-                    command.add("-r")
-                    command.add(rootfsDir.absolutePath)
-                    command.add("-b")
-                    command.add("/dev")
-                    command.add("-b")
-                    command.add("/proc")
-                    command.add("-b")
-                    command.add("${fakeProc.absolutePath}/stat:/proc/stat")
-                    command.add("-b")
-                    command.add("${fakeProc.absolutePath}/version:/proc/version")
-                    command.add("-b")
-                    command.add("${fakeProc.absolutePath}/vmstat:/proc/vmstat")
-                    command.add("-b")
-                    command.add("${serverDir.absolutePath}:/server")
-                    command.add("-w")
-                    command.add("/server")
+                // Monta comando PRoot isolado no sandbox
+                command.add(prootBin.absolutePath)
+                command.add("-0")
+                command.add("-l")
+                command.add("-r")
+                command.add(rootfsDir.absolutePath)
 
-                    command.add("/opt/java/bin/java")
-                    command.addAll(jvmArgs)
-                    command.add("-jar")
-                    command.add("server.jar")
-                    command.add("nogui")
-                } else {
-                    val sysJava = findSystemJava() ?: "java"
-                    command.add(sysJava)
-                    command.addAll(jvmArgs)
-                    command.add("-jar")
-                    command.add(jarFile.absolutePath)
-                    command.add("nogui")
-                }
+                // Bind mounts
+                command.add("-b")
+                command.add("/dev")
+                command.add("-b")
+                command.add("/proc")
+                command.add("-b")
+                command.add("/sys")
+                command.add("-b")
+                command.add("${fakeProc.absolutePath}/stat:/proc/stat")
+                command.add("-b")
+                command.add("${fakeProc.absolutePath}/version:/proc/version")
+                command.add("-b")
+                command.add("${fakeProc.absolutePath}/vmstat:/proc/vmstat")
+                command.add("-b")
+                command.add("${tmpDir.absolutePath}:/tmp")
+                command.add("-b")
+                command.add("${serverDir.absolutePath}:/server")
+                command.add("-w")
+                command.add("/server")
+
+                val javaRelPath = InternalRuntimeManager.getJavaRelativePath(context)
+                command.add(javaRelPath)
+                command.addAll(jvmArgs)
+                command.add("-jar")
+                command.add("server.jar")
+                command.add("nogui")
 
                 onLog(LogMessage(
                     text = "[MineDroid] Servidor '${config.name}' iniciando com ${config.allocatedRamMb}MB...",
@@ -83,15 +116,28 @@ class ProcessRunner(
                 processBuilder.directory(serverDir)
                 processBuilder.redirectErrorStream(true)
 
-                // Environment
+                val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
+                val loaderFile = File(nativeLibDir, "libproot_loader.so")
+
+                // Variáveis de ambiente exigidas pelo PRoot
                 val env = processBuilder.environment()
+                env["LD_LIBRARY_PATH"] = nativeLibDir.absolutePath
+                if (loaderFile.exists() && loaderFile.length() > 0L) {
+                    env["PROOT_LOADER"] = loaderFile.absolutePath
+                }
+                env["PROOT_TMP_DIR"] = tmpDir.absolutePath
+                env["PROOT_L2S_DIR"] = l2sDir.absolutePath
+                env["PROOT_UNSETENV"] = "LD_LIBRARY_PATH:TMPDIR:TMP"
                 env["PROOT_NO_SECCOMP"] = "1"
                 env["PROOT_FORCE_SETID"] = "1"
+                env["PROOT_LINK2SYMLINK"] = "1"
+                env["PROOT_IGNORE_MISSING_BINDINGS"] = "1"
                 env["HOME"] = "/root"
                 env["PATH"] = "/opt/java/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
                 env["LANG"] = "C.UTF-8"
-                env["TMPDIR"] = tmpDir.absolutePath
-                env["TMP"] = tmpDir.absolutePath
+                env["TERM"] = "xterm-256color"
+                env["TMPDIR"] = "/tmp"
+                env["TMP"] = "/tmp"
 
                 val proc = processBuilder.start()
                 process = proc
@@ -99,7 +145,7 @@ class ProcessRunner(
                 startTimeMs = System.currentTimeMillis()
                 playerCount = 0
 
-                // Read Output
+                // Leitura de logs da saída do servidor
                 launch {
                     val reader = BufferedReader(InputStreamReader(proc.inputStream))
                     var line: String?
@@ -109,11 +155,11 @@ class ProcessRunner(
                             handleServerOutput(msg)
                         }
                     } catch (_: Exception) {
-                        // Stream closed
+                        // Stream fechado
                     }
                 }
 
-                // Monitor stats & uptime
+                // Monitoramento de tempo de atividade e estatísticas
                 launch {
                     while (proc.isAlive) {
                         val uptimeSec = (System.currentTimeMillis() - startTimeMs) / 1000
@@ -179,7 +225,7 @@ class ProcessRunner(
             onLog(LogMessage("[MineDroid] Salvando mundo e parando servidor...", LogType.SYSTEM))
             sendCommand("stop")
 
-            // Wait up to 10 seconds
+            // Aguarda até 10 segundos para salvar o mundo
             for (i in 0 until 20) {
                 if (process?.isAlive != true) break
                 delay(500)
@@ -210,21 +256,6 @@ class ProcessRunner(
         process = null
         runnerScope?.cancel()
         runnerScope = null
-    }
-
-    private fun findSystemJava(): String? {
-        val candidates = listOf(
-            "${context.filesDir.absolutePath}/usr/bin/java",
-            "${context.filesDir.absolutePath}/java/bin/java",
-            "/system/bin/java"
-        )
-        for (path in candidates) {
-            val file = File(path)
-            if (file.exists() && file.canExecute()) {
-                return path
-            }
-        }
-        return null
     }
 
     private fun stripAnsi(text: String): String {

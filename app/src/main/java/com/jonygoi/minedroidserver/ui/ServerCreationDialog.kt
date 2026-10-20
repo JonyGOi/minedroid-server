@@ -48,6 +48,7 @@ fun ServerCreationDialog(
     var claimLoading by remember { mutableStateOf(false) }
     var activeClaimCode by remember { mutableStateOf<String?>(null) }
     var activeClaimUrl by remember { mutableStateOf<String?>(null) }
+    var manualSecretKey by remember { mutableStateOf(PlayitManager.getSavedSecretKey(context) ?: "") }
 
     var ramMb by remember { mutableFloatStateOf(recommendedRam.toFloat()) }
     var enableGeyser by remember { mutableStateOf(true) }
@@ -250,6 +251,28 @@ fun ServerCreationDialog(
                             }
 
                             if (enablePlayit) {
+                                if (manualSecretKey.isNotBlank()) {
+                                    Surface(
+                                        color = MinecraftEmerald.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftEmerald, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Chave Playit.gg salva e ativa!",
+                                                color = MinecraftEmerald,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
                                 Button(
                                     onClick = {
                                         claimLoading = true
@@ -262,7 +285,7 @@ fun ServerCreationDialog(
                                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
                                                 context.startActivity(intent)
                                             } else {
-                                                Toast.makeText(context, "Não foi possível conectar ao Playit.gg. Verifique sua conexão.", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Não foi possível abrir sessão automática. Use a caixa de texto abaixo para colar sua Secret Key.", Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     },
@@ -273,7 +296,7 @@ fun ServerCreationDialog(
                                     Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftObsidian)
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        if (claimLoading) "Conectando ao Playit.gg..." else "VINCULAR CONTA PLAYIT.GG",
+                                        if (claimLoading) "Conectando ao Playit.gg..." else "VINCULAR VIA NAVEGADOR",
                                         fontWeight = FontWeight.Bold,
                                         color = MinecraftObsidian,
                                         fontSize = 12.sp
@@ -289,6 +312,7 @@ fun ServerCreationDialog(
                                                 claimLoading = false
                                                 if (!secret.isNullOrBlank()) {
                                                     PlayitManager.saveSecretKey(context, secret)
+                                                    manualSecretKey = secret
                                                     activeClaimCode = null
                                                     activeClaimUrl = null
                                                     Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_SHORT).show()
@@ -307,11 +331,35 @@ fun ServerCreationDialog(
 
                                 activeClaimUrl?.let { url ->
                                     Text(
-                                        text = "Reivindicação iniciada! Se o navegador não abriu, acesse: $url",
+                                        text = "Link de autorização: $url",
                                         fontSize = 10.sp,
                                         color = MinecraftGold
                                     )
                                 }
+
+                                // Campo para inserir ou colar chave secreta manualmente
+                                OutlinedTextField(
+                                    value = manualSecretKey,
+                                    onValueChange = {
+                                        manualSecretKey = it.trim()
+                                        if (manualSecretKey.isNotBlank()) {
+                                            PlayitManager.saveSecretKey(context, manualSecretKey)
+                                        }
+                                    },
+                                    label = { Text("Ou cole a Secret Key do Playit (Opcional)", fontSize = 11.sp) },
+                                    placeholder = { Text("Ex: 1a2b3c4d5e...", fontSize = 11.sp) },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MinecraftDiamond,
+                                        unfocusedBorderColor = MinecraftBorder,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                        focusedLabelColor = MinecraftDiamond,
+                                        unfocusedLabelColor = TextSecondary
+                                    ),
+                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
                     }

@@ -30,22 +30,54 @@ object InternalRuntimeManager {
         return File(context.filesDir, "internal_rootfs")
     }
 
+    /**
+     * Localiza o executável real do Java dentro da raiz do rootfs
+     */
     fun getJavaExecutable(context: Context): File {
         val rootfs = getRootfsDirectory(context)
-        val optJava = File(rootfs, "opt/java/bin/java")
-        if (optJava.exists()) return optJava
+        val directOpt = File(rootfs, "opt/java/bin/java")
+        if (directOpt.exists() && directOpt.length() > 1000L) return directOpt
 
-        // Also check if extracted under a subfolder in opt
+        val directUsr = File(rootfs, "usr/bin/java")
+        if (directUsr.exists() && directUsr.length() > 1000L) return directUsr
+
+        val directBin = File(rootfs, "bin/java")
+        if (directBin.exists() && directBin.length() > 1000L) return directBin
+
+        // Pesquisa no subdiretório opt
         val optDir = File(rootfs, "opt")
         if (optDir.exists()) {
-            val matching = optDir.listFiles()?.firstOrNull {
-                File(it, "bin/java").exists()
-            }
-            if (matching != null) {
-                return File(matching, "bin/java")
+            optDir.listFiles()?.forEach { sub ->
+                val cand = File(sub, "bin/java")
+                if (cand.exists() && cand.length() > 1000L) return cand
             }
         }
-        return optJava
+
+        // Pesquisa em usr/lib/jvm
+        val jvmDir = File(rootfs, "usr/lib/jvm")
+        if (jvmDir.exists()) {
+            jvmDir.listFiles()?.forEach { sub ->
+                val cand = File(sub, "bin/java")
+                if (cand.exists() && cand.length() > 1000L) return cand
+            }
+        }
+
+        return directOpt
+    }
+
+    /**
+     * Caminho relativo dentro do PRoot (ex: /opt/java/bin/java)
+     */
+    fun getJavaRelativePath(context: Context): String {
+        val rootfs = getRootfsDirectory(context)
+        val javaBin = getJavaExecutable(context)
+        if (javaBin.exists()) {
+            val rel = javaBin.relativeToOrNull(rootfs)?.invariantSeparatorsPath
+            if (!rel.isNullOrEmpty()) {
+                return "/$rel"
+            }
+        }
+        return "/opt/java/bin/java"
     }
 
     /**
@@ -53,19 +85,28 @@ object InternalRuntimeManager {
      */
     fun isRuntimeInstalled(context: Context): Boolean {
         val javaBin = getJavaExecutable(context)
-        return javaBin.exists() && javaBin.length() > 0
+        return javaBin.exists() && javaBin.length() > 10000L
     }
 
     /**
-     * Localiza o binário nativo do PRoot montado pelo Android
+     * Localiza o binário nativo do PRoot montado pelo Android PackageManager
      */
     fun getPRootBinary(context: Context): File {
         val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
         val libProot = File(nativeLibDir, "libproot.so")
-        if (libProot.exists() && libProot.length() > 0) {
+        if (libProot.exists() && libProot.length() > 0L) {
+            libProot.setExecutable(true, false)
             return libProot
         }
-        return File(context.filesDir, "bin/libproot.so")
+
+        // Fallback em caso de emulação/diretório alternativo
+        val filesProot = File(context.filesDir, "bin/libproot.so")
+        if (filesProot.exists() && filesProot.length() > 0L) {
+            filesProot.setExecutable(true, false)
+            return filesProot
+        }
+
+        return libProot
     }
 
     /**
@@ -101,7 +142,7 @@ object InternalRuntimeManager {
 
             // 2. Extrair Base
             onProgress("Extraindo base do sistema integrada...", 0.42f)
-            extractTarGz(cacheBaseFile, rootfsDir) { _, _ -> }
+            extractTarGz(cacheBaseFile, rootfsDir)
             cacheBaseFile.delete()
 
             // 3. Download OpenJDK 17
@@ -119,7 +160,7 @@ object InternalRuntimeManager {
             val optDir = File(rootfsDir, "opt")
             if (!optDir.exists()) optDir.mkdirs()
 
-            extractTarGz(cacheJreFile, optDir) { _, _ -> }
+            extractTarGz(cacheJreFile, optDir)
             cacheJreFile.delete()
 
             // Se o JRE foi extraído dentro de uma subpasta (ex: jdk-17.0.12+7-jre), renomeia para /opt/java
@@ -133,10 +174,24 @@ object InternalRuntimeManager {
                 }
             }
 
-            // 5. Configurar permissões e arquivos /proc emulados
+            // 5. Configurar permissões de execução e arquivos /proc emulados
             val javaBin = getJavaExecutable(context)
+            javaBin.parentFile?.listFiles()?.forEach { binFile ->
+                binFile.setExecutable(true, false)
+                binFile.setReadable(true, false)
+            }
             javaBin.setExecutable(true, false)
             javaBin.setReadable(true, false)
+
+            // Criar atalho /usr/bin/java se possível
+            try {
+                val usrBin = File(rootfsDir, "usr/bin").apply { mkdirs() }
+                val usrJava = File(usrBin, "java")
+                if (!usrJava.exists()) {
+                    val relPath = getJavaRelativePath(context)
+                    Os.symlink(relPath, usrJava.absolutePath)
+                }
+            } catch (_: Exception) {}
 
             ensureFakeProcFiles(context)
 
@@ -147,8 +202,8 @@ object InternalRuntimeManager {
             onProgress("Erro na instalação do motor Java: ${e.message}", 0f)
             false
         } finally {
-            cacheBaseFile.delete()
-            cacheJreFile.delete()
+            try { cacheBaseFile.delete() } catch (_: Exception) {}
+            try { cacheJreFile.delete() } catch (_: Exception) {}
         }
     }
 
@@ -197,9 +252,9 @@ object InternalRuntimeManager {
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
             conn.instanceFollowRedirects = true
-            conn.connectTimeout = 15000
+            conn.connectTimeout = 20000
             conn.readTimeout = 60000
-            conn.setRequestProperty("User-Agent", "MineDroid-App")
+            conn.setRequestProperty("User-Agent", "MineDroid-App/1.6.0")
             conn.connect()
 
             val totalBytes = conn.contentLengthLong
@@ -207,7 +262,7 @@ object InternalRuntimeManager {
 
             conn.inputStream.use { input ->
                 FileOutputStream(dest).use { output ->
-                    val buffer = ByteArray(16384)
+                    val buffer = ByteArray(32768)
                     var bytesRead: Int
                     while (input.read(buffer).also { bytesRead = it } != -1) {
                         output.write(buffer, 0, bytesRead)
@@ -226,17 +281,15 @@ object InternalRuntimeManager {
     }
 
     /**
-     * Extrai arquivos .tar.gz diretamente usando a biblioteca padrão do Java
+     * Extrai arquivos .tar.gz com suporte a GNU LongLink ('L' e 'K') e symlinks
      */
-    fun extractTarGz(
-        tarGzFile: File,
-        targetDir: File,
-        onProgress: ((String, Int) -> Unit)? = null
-    ) {
+    fun extractTarGz(tarGzFile: File, targetDir: File) {
         if (!targetDir.exists()) targetDir.mkdirs()
         val gzipIn = GZIPInputStream(BufferedInputStream(FileInputStream(tarGzFile), 65536))
         val buffer = ByteArray(512)
-        var extractedFiles = 0
+
+        var longLinkName: String? = null
+        var longTargetName: String? = null
 
         while (true) {
             readFully(gzipIn, buffer)
@@ -245,13 +298,40 @@ object InternalRuntimeManager {
 
             val rawName = String(buffer, 0, 100, Charsets.US_ASCII).trimEnd('\u0000', ' ')
             val prefix = String(buffer, 345, 155, Charsets.US_ASCII).trimEnd('\u0000', ' ')
-            val entryName = if (prefix.isNotEmpty()) "$prefix/$rawName" else rawName
-            if (entryName.isEmpty()) continue
-
+            var entryName = if (prefix.isNotEmpty()) "$prefix/$rawName" else rawName
             val size = parseOctal(buffer, 124, 12)
             val typeFlag = buffer[156].toInt().toChar()
+
+            if (typeFlag == 'L') {
+                val nameBytes = ByteArray(size.toInt())
+                readFully(gzipIn, nameBytes)
+                longLinkName = String(nameBytes, Charsets.UTF_8).trimEnd('\u0000', ' ', '\n', '\r')
+                val remainder = ((512 - (size % 512)) % 512).toInt()
+                if (remainder > 0) skipBytes(gzipIn, remainder.toLong())
+                continue
+            }
+            if (typeFlag == 'K') {
+                val linkBytes = ByteArray(size.toInt())
+                readFully(gzipIn, linkBytes)
+                longTargetName = String(linkBytes, Charsets.UTF_8).trimEnd('\u0000', ' ', '\n', '\r')
+                val remainder = ((512 - (size % 512)) % 512).toInt()
+                if (remainder > 0) skipBytes(gzipIn, remainder.toLong())
+                continue
+            }
+
+            if (!longLinkName.isNullOrEmpty()) {
+                entryName = longLinkName
+                longLinkName = null
+            }
+            if (entryName.isEmpty()) {
+                val remainder = ((512 - (size % 512)) % 512).toInt()
+                if (remainder > 0) skipBytes(gzipIn, remainder.toLong())
+                continue
+            }
+
+            // Normaliza caminho sem barras iniciais
+            entryName = entryName.removePrefix("./").removePrefix("/")
             val destFile = File(targetDir, entryName)
-            extractedFiles++
 
             when (typeFlag) {
                 '5' -> { // Directory
@@ -280,7 +360,8 @@ object InternalRuntimeManager {
                 }
                 '1', '2' -> { // Symlink / Hardlink
                     destFile.parentFile?.mkdirs()
-                    val rawLink = String(buffer, 157, 100, Charsets.US_ASCII).trimEnd('\u0000', ' ')
+                    val rawLink = longTargetName ?: String(buffer, 157, 100, Charsets.US_ASCII).trimEnd('\u0000', ' ')
+                    longTargetName = null
                     if (rawLink.isNotEmpty()) {
                         try {
                             if (destFile.exists()) destFile.delete()
@@ -323,7 +404,7 @@ object InternalRuntimeManager {
 
     private fun copyBytes(input: InputStream, output: FileOutputStream, count: Long) {
         var remaining = count
-        val buf = ByteArray(16384)
+        val buf = ByteArray(32768)
         while (remaining > 0) {
             val toRead = minOf(buf.size.toLong(), remaining).toInt()
             val r = input.read(buf, 0, toRead)
@@ -335,7 +416,7 @@ object InternalRuntimeManager {
 
     private fun skipBytes(input: InputStream, count: Long) {
         var remaining = count
-        val buf = ByteArray(16384)
+        val buf = ByteArray(32768)
         while (remaining > 0) {
             val toRead = minOf(buf.size.toLong(), remaining).toInt()
             val r = input.read(buf, 0, toRead)
