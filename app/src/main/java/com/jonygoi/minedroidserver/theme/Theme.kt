@@ -1,4 +1,4 @@
-package com.example.minedroidserver.theme
+package com.jonygoi.minedroidserver.theme
 
 import android.app.Activity
 import android.os.Build

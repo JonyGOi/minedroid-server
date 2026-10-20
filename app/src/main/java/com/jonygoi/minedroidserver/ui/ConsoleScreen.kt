@@ -1,4 +1,4 @@
-package com.example.minedroidserver.ui
+package com.jonygoi.minedroidserver.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -25,8 +25,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.minedroidserver.server.*
-import com.example.minedroidserver.theme.*
+import com.jonygoi.minedroidserver.server.*
+import com.jonygoi.minedroidserver.theme.*
 import kotlinx.coroutines.launch
 
 @Composable

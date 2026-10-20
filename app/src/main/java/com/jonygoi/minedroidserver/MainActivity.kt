@@ -1,4 +1,4 @@
-package com.example.minedroidserver
+package com.jonygoi.minedroidserver
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -17,8 +17,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.content.ContextCompat
-import com.example.minedroidserver.theme.*
-import com.example.minedroidserver.ui.*
+import com.jonygoi.minedroidserver.theme.*
+import com.jonygoi.minedroidserver.ui.*
 
 enum class AppTab(val title: String, val icon: ImageVector) {
     DASHBOARD("Painel", Icons.Default.Dashboard),

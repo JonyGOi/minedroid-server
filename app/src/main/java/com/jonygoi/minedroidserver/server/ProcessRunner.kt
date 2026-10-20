@@ -1,4 +1,4 @@
-package com.example.minedroidserver.server
+package com.jonygoi.minedroidserver.server
 
 import android.content.Context
 import kotlinx.coroutines.*

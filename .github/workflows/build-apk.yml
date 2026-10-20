@@ -3,6 +3,7 @@ name: Build MineDroid Server APK
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
@@ -25,11 +26,19 @@ jobs:
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+    - name: Build Signed Release APK
+      run: ./gradlew assembleRelease --stacktrace
 
-    - name: Upload APK Artifact
+    - name: Compute SHA-256
+      run: |
+        cd app/build/outputs/apk/release
+        sha256sum app-release.apk > app-release.apk.sha256
+        cat app-release.apk.sha256
+
+    - name: Upload Release APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: MineDroid-Server-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: MineDroid-Server-Release-APK
+        path: |
+          app/build/outputs/apk/release/app-release.apk
+          app/build/outputs/apk/release/app-release.apk.sha256

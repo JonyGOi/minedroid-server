@@ -1,4 +1,4 @@
-package com.example.minedroidserver.server
+package com.jonygoi.minedroidserver.server
 
 import java.net.Inet4Address
 import java.net.NetworkInterface

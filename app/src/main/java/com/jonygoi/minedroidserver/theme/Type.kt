@@ -1,4 +1,4 @@
-package com.example.minedroidserver.theme
+package com.jonygoi.minedroidserver.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

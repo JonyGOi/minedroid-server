@@ -1,4 +1,4 @@
-package com.example.minedroidserver.server
+package com.jonygoi.minedroidserver.server
 
 enum class ServerType(val displayName: String, val category: String, val isJava: Boolean) {
     PAPER("PaperMC", "Java Edition (Recomendado)", true),

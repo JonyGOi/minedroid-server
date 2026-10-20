@@ -1,4 +1,4 @@
-package com.example.minedroidserver.theme
+package com.jonygoi.minedroidserver.theme
 
 import androidx.compose.ui.graphics.Color
 

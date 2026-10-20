@@ -1,4 +1,4 @@
-package com.example.minedroidserver.ui
+package com.jonygoi.minedroidserver.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -18,8 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.minedroidserver.server.*
-import com.example.minedroidserver.theme.*
+import com.jonygoi.minedroidserver.server.*
+import com.jonygoi.minedroidserver.theme.*
 
 @Composable
 fun ServerConfigScreen(onSaved: () -> Unit) {

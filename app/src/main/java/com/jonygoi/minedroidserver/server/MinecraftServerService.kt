@@ -1,4 +1,4 @@
-package com.example.minedroidserver.server
+package com.jonygoi.minedroidserver.server
 
 import android.app.*
 import android.content.Context
@@ -8,7 +8,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
-import com.example.minedroidserver.MainActivity
+import com.jonygoi.minedroidserver.MainActivity
 
 class MinecraftServerService : Service() {
 

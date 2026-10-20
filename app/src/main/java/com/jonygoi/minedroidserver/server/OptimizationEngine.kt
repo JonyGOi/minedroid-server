@@ -1,4 +1,4 @@
-package com.example.minedroidserver.server
+package com.jonygoi.minedroidserver.server
 
 import android.app.ActivityManager
 import android.content.Context
