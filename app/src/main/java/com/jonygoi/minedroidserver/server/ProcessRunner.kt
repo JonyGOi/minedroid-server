@@ -28,34 +28,46 @@ class ProcessRunner(
                 val serverDir = ServerInstaller.getServerDirectory(context, config.id)
                 val jarFile = File(serverDir, "server.jar")
 
-                // Locate Java binary
-                val javaBin = findJavaBinary()
-
-                // Generate and update Termux-compatible startup script
-                TermuxBridge.generateStartupScript(context, config)
+                val prootBin = InternalRuntimeManager.getPRootBinary(context)
+                val rootfsDir = InternalRuntimeManager.getRootfsDirectory(context)
+                val fakeProc = InternalRuntimeManager.ensureFakeProcFiles(context)
+                val tmpDir = File(context.filesDir, "tmp").apply { mkdirs() }
 
                 val jvmArgs = OptimizationEngine.buildJvmArgs(config)
                 val command = mutableListOf<String>()
 
-                if (javaBin != null) {
-                    command.add(javaBin)
+                if (InternalRuntimeManager.isRuntimeInstalled(context) && prootBin.exists()) {
+                    onLog(LogMessage("[MineDroid] Executando com Motor OpenJDK 17 Integrado (100% no App)...", LogType.SYSTEM))
+                    command.add(prootBin.absolutePath)
+                    command.add("-r")
+                    command.add(rootfsDir.absolutePath)
+                    command.add("-b")
+                    command.add("/dev")
+                    command.add("-b")
+                    command.add("/proc")
+                    command.add("-b")
+                    command.add("${fakeProc.absolutePath}/stat:/proc/stat")
+                    command.add("-b")
+                    command.add("${fakeProc.absolutePath}/version:/proc/version")
+                    command.add("-b")
+                    command.add("${fakeProc.absolutePath}/vmstat:/proc/vmstat")
+                    command.add("-b")
+                    command.add("${serverDir.absolutePath}:/server")
+                    command.add("-w")
+                    command.add("/server")
+
+                    command.add("/opt/java/bin/java")
+                    command.addAll(jvmArgs)
+                    command.add("-jar")
+                    command.add("server.jar")
+                    command.add("nogui")
+                } else {
+                    val sysJava = findSystemJava() ?: "java"
+                    command.add(sysJava)
                     command.addAll(jvmArgs)
                     command.add("-jar")
                     command.add(jarFile.absolutePath)
                     command.add("nogui")
-                } else {
-                    if (TermuxBridge.isTermuxInstalled(context)) {
-                        onLog(LogMessage(
-                            text = "[MineDroid] Termux detectado! Toque no icone do Termux no topo do console para rodar com maxima performance de CPU.",
-                            type = LogType.SYSTEM
-                        ))
-                    }
-                    // Fallback to proot or shell execution
-                    command.add("sh")
-                    command.add("-c")
-                    val cmdStr = "export PATH=\$PATH:/data/data/com.termux/files/usr/bin && " +
-                            "java ${jvmArgs.joinToString(" ")} -jar ${jarFile.name} nogui"
-                    command.add(cmdStr)
                 }
 
                 onLog(LogMessage(
@@ -73,9 +85,13 @@ class ProcessRunner(
 
                 // Environment
                 val env = processBuilder.environment()
-                env["HOME"] = serverDir.absolutePath
-                env["LANG"] = "en_US.UTF-8"
-                env["PATH"] = "${env["PATH"] ?: ""}:/data/data/com.termux/files/usr/bin:/system/bin"
+                env["PROOT_NO_SECCOMP"] = "1"
+                env["PROOT_FORCE_SETID"] = "1"
+                env["HOME"] = "/root"
+                env["PATH"] = "/opt/java/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                env["LANG"] = "C.UTF-8"
+                env["TMPDIR"] = tmpDir.absolutePath
+                env["TMP"] = tmpDir.absolutePath
 
                 val proc = processBuilder.start()
                 process = proc
@@ -92,7 +108,7 @@ class ProcessRunner(
                             val msg = line ?: continue
                             handleServerOutput(msg)
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         // Stream closed
                     }
                 }
@@ -108,12 +124,6 @@ class ProcessRunner(
 
                 val exitCode = proc.waitFor()
                 onLog(LogMessage("[MineDroid] Processo finalizado com código $exitCode", LogType.SYSTEM))
-                if (exitCode == 127) {
-                    onLog(LogMessage(
-                        "[MineDroid] O binário 'java' requer execução via Termux. Toque no ícone do Termux no topo para iniciar com o Java nativo do Termux!",
-                        LogType.WARN
-                    ))
-                }
                 onStateChange(ServerState.STOPPED)
 
             } catch (e: Exception) {
@@ -133,34 +143,32 @@ class ProcessRunner(
             cleanMsg.contains("WARN", ignoreCase = true) -> LogType.WARN
             cleanMsg.contains("Done (", ignoreCase = true) -> {
                 onStateChange(ServerState.RUNNING)
-                LogType.INFO
+                LogType.SYSTEM
             }
             cleanMsg.contains("joined the game", ignoreCase = true) -> {
                 playerCount++
                 LogType.JOIN
             }
             cleanMsg.contains("left the game", ignoreCase = true) -> {
-                if (playerCount > 0) playerCount--
+                playerCount = maxOf(0, playerCount - 1)
                 LogType.LEAVE
             }
             else -> LogType.INFO
         }
-
-        onLog(LogMessage(text = cleanMsg, type = type))
+        onLog(LogMessage(cleanMsg, type))
     }
 
-    fun sendCommand(command: String) {
+    fun sendCommand(cmd: String) {
         runnerScope?.launch(Dispatchers.IO) {
             try {
-                val w = writer
-                if (w != null && isRunning()) {
-                    w.write(command)
+                writer?.let { w ->
+                    w.write(cmd)
                     w.newLine()
                     w.flush()
-                    onLog(LogMessage("> $command", LogType.COMMAND))
+                    onLog(LogMessage("> $cmd", LogType.COMMAND))
                 }
             } catch (e: Exception) {
-                onLog(LogMessage("[MineDroid] Falha ao enviar comando: ${e.message}", LogType.ERROR))
+                e.printStackTrace()
             }
         }
     }
@@ -204,9 +212,8 @@ class ProcessRunner(
         runnerScope = null
     }
 
-    private fun findJavaBinary(): String? {
+    private fun findSystemJava(): String? {
         val candidates = listOf(
-            "/data/data/com.termux/files/usr/bin/java",
             "${context.filesDir.absolutePath}/usr/bin/java",
             "${context.filesDir.absolutePath}/java/bin/java",
             "/system/bin/java"

@@ -497,19 +497,6 @@ fun DashboardScreen(
                                 Icon(Icons.Default.Terminal, contentDescription = "Terminal", modifier = Modifier.size(18.dp))
                             }
 
-                            // Termux 1-tap Button
-                            OutlinedButton(
-                                onClick = {
-                                    TermuxBridge.launchInTermux(context, s)
-                                },
-                                modifier = Modifier.height(44.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MinecraftDiamond),
-                                border = BorderStroke(1.dp, MinecraftDiamond.copy(alpha = 0.5f))
-                            ) {
-                                Icon(Icons.Default.Terminal, contentDescription = "Termux", modifier = Modifier.size(18.dp), tint = MinecraftDiamond)
-                            }
-
                             // Config Button
                             OutlinedButton(
                                 onClick = {

@@ -187,6 +187,22 @@ object ServerManager {
             _state.value = ServerState.PREPARING
             addLog(LogMessage("[MineDroid] Preparando servidor '${cfg.name}'...", LogType.SYSTEM))
 
+            // 1. Garantir que o Motor OpenJDK 17 nativo integrado esteja pronto (apenas na 1ª execução)
+            if (cfg.serverType.isJava && !InternalRuntimeManager.isRuntimeInstalled(context)) {
+                _state.value = ServerState.DOWNLOADING
+                addLog(LogMessage("[MineDroid] Configurando motor Java nativo integrado no app...", LogType.SYSTEM))
+                val runtimeOk = InternalRuntimeManager.prepareRuntime(context) { status, progress ->
+                    _downloadProgress.value = status to progress
+                }
+                if (!runtimeOk) {
+                    _state.value = ServerState.ERROR
+                    addLog(LogMessage("[MineDroid] Falha ao configurar motor Java integrado.", LogType.ERROR))
+                    return@launch
+                }
+                addLog(LogMessage("[MineDroid] Motor Java integrado configurado com sucesso!", LogType.SYSTEM))
+            }
+
+            // 2. Preparar arquivos do servidor (JAR, configs, EULA, plugins)
             val prepared = ServerInstaller.prepareServerFiles(context, cfg) { status, progress ->
                 _downloadProgress.value = status to progress
                 if (progress > 0f) {
