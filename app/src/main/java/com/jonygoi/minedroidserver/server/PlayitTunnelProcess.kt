@@ -2,6 +2,7 @@ package com.jonygoi.minedroidserver.server
 
 import android.content.Context
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -11,6 +12,8 @@ object PlayitTunnelProcess {
     private var processScope: CoroutineScope? = null
     @Volatile
     private var isStarting: Boolean = false
+
+    val isRunningFlow = MutableStateFlow(false)
 
     fun isRunning(): Boolean = isStarting || (process?.isAlive == true)
 
@@ -36,41 +39,44 @@ object PlayitTunnelProcess {
         } catch (_: Exception) {}
 
         val playitDir = File(context.filesDir, "playit").apply { mkdirs() }
-        val playitToml = File(playitDir, "playit.toml")
+        val configDirs = listOf(
+            playitDir,
+            File(playitDir, ".config/playit_gg").apply { mkdirs() },
+            File(playitDir, ".config/playit").apply { mkdirs() }
+        )
 
-        // Se o usuário já tiver uma chave salva nas preferências, escreve no playit.toml
+        // Se o usuário já tiver uma chave salva nas preferências, escreve nos locais padrão do playit
         val savedSecret = PlayitManager.getSavedSecretKey(context)
         if (!savedSecret.isNullOrBlank()) {
             val tomlContent = buildString {
                 appendLine("secret = \"$savedSecret\"")
                 appendLine("secret_key = \"$savedSecret\"")
             }
-            if (!playitToml.exists() || !playitToml.readText().contains(savedSecret)) {
+            configDirs.forEach { dir ->
                 try {
-                    playitToml.writeText(tomlContent)
+                    File(dir, "playit.toml").writeText(tomlContent)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         } else {
-            // Se não há secret salvo, remove playit.toml para que o agente gere um claim novo sem travar esperando resposta
-            if (playitToml.exists()) {
-                try { playitToml.delete() } catch (_: Exception) {}
+            // Se não há chave salva, remove os arquivos playit.toml antigos para forçar o auto-run a gerar claim URL novo
+            configDirs.forEach { dir ->
+                try {
+                    File(dir, "playit.toml").delete()
+                } catch (_: Exception) {}
             }
         }
 
         processScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         processScope?.launch {
             try {
-                onLog(LogMessage("[Playit.gg] Iniciando túnel nativo integrado via libplayit...", LogType.SYSTEM))
+                onLog(LogMessage("[Playit.gg] Iniciando túnel nativo integrado...", LogType.SYSTEM))
+                isRunningFlow.value = true
 
-                val cmd = mutableListOf<String>()
-                cmd.add(playitBin.absolutePath)
-                // Flags de root: -s aponta para o playit.toml, --stdout ativa logs do agente, e 'start' inicia o túnel
-                cmd.add("-s")
-                cmd.add(playitToml.absolutePath)
-                cmd.add("--stdout")
-                cmd.add("start")
+                // Executa o binário nativo do playit diretamente no diretório onde está o playit.toml
+                // Sem flags adicionais, acionando o auto-run nativo do playit de forma 100% limpa
+                val cmd = listOf(playitBin.absolutePath)
 
                 val pb = ProcessBuilder(cmd)
                 pb.directory(playitDir)
@@ -80,8 +86,6 @@ object PlayitTunnelProcess {
                 env["HOME"] = playitDir.absolutePath
                 val tmpDir = File(context.filesDir, "tmp").apply { mkdirs() }
                 env["TMPDIR"] = tmpDir.absolutePath
-                val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
-                env["LD_LIBRARY_PATH"] = "${nativeLibDir.absolutePath}:/system/lib64:/system/lib"
                 env["PATH"] = "/system/bin:/system/xbin"
 
                 val proc = pb.start()
@@ -113,12 +117,34 @@ object PlayitTunnelProcess {
 
                         // Se o playit salvou uma chave nova no playit.toml, sincroniza com as preferências do app
                         try {
-                            if (playitToml.exists()) {
-                                val content = playitToml.readText()
-                                val secretMatch = Regex("""(?:secret|secret_key)\s*=\s*\"([^\"]+)\"""").find(content)
-                                if (secretMatch != null) {
-                                    val secret = secretMatch.groupValues[1]
-                                    PlayitManager.saveSecretKey(context, secret)
+                            for (dir in configDirs) {
+                                val toml = File(dir, "playit.toml")
+                                if (toml.exists()) {
+                                    val content = toml.readText()
+                                    val secretMatch = Regex("""(?:secret|secret_key)\s*=\s*\"([^\"]+)\"""").find(content)
+                                    if (secretMatch != null) {
+                                        val secret = secretMatch.groupValues[1]
+                                        PlayitManager.saveSecretKey(context, secret)
+                                        break
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // Sincroniza a chave se o agente foi aprovado na web
+                    if (cleanMsg.contains("Program approved", ignoreCase = true) || cleanMsg.contains("tunnel running", ignoreCase = true)) {
+                        try {
+                            for (dir in configDirs) {
+                                val toml = File(dir, "playit.toml")
+                                if (toml.exists()) {
+                                    val content = toml.readText()
+                                    val secretMatch = Regex("""(?:secret|secret_key)\s*=\s*\"([^\"]+)\"""").find(content)
+                                    if (secretMatch != null) {
+                                        val secret = secretMatch.groupValues[1]
+                                        PlayitManager.saveSecretKey(context, secret)
+                                        break
+                                    }
                                 }
                             }
                         } catch (_: Exception) {}
@@ -161,6 +187,7 @@ object PlayitTunnelProcess {
 
     private fun cleanup() {
         isStarting = false
+        isRunningFlow.value = false
         process = null
         processScope?.cancel()
         processScope = null

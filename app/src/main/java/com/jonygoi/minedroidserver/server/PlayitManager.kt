@@ -46,13 +46,25 @@ object PlayitManager {
 
         try {
             val playitDir = File(context.filesDir, "playit")
-            val playitToml = File(playitDir, "playit.toml")
-            if (playitToml.exists()) {
-                playitToml.delete()
+            val configDirs = listOf(
+                playitDir,
+                File(playitDir, ".config/playit_gg"),
+                File(playitDir, ".config/playit")
+            )
+            configDirs.forEach { dir ->
+                val toml = File(dir, "playit.toml")
+                if (toml.exists()) {
+                    toml.delete()
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun isPlayitBinaryInstalled(context: Context): Boolean {
+        val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
+        return playitBin.exists() && playitBin.length() > 0L
     }
 
     fun getSavedSecretKey(context: Context): String? {
@@ -64,18 +76,52 @@ object PlayitManager {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().putString(KEY_SECRET, secretKey).apply()
 
-        // Sincroniza também no arquivo playit.toml nativo
+        // Sincroniza também nos arquivos playit.toml nativos
         try {
             val playitDir = File(context.filesDir, "playit").apply { mkdirs() }
-            val playitToml = File(playitDir, "playit.toml")
+            val configDirs = listOf(
+                playitDir,
+                File(playitDir, ".config/playit_gg").apply { mkdirs() },
+                File(playitDir, ".config/playit").apply { mkdirs() }
+            )
             val tomlText = buildString {
                 appendLine("secret = \"$secretKey\"")
                 appendLine("secret_key = \"$secretKey\"")
             }
-            playitToml.writeText(tomlText)
+            configDirs.forEach { dir ->
+                File(dir, "playit.toml").writeText(tomlText)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun findSecretInConfigFiles(context: Context): String? {
+        try {
+            val playitDir = File(context.filesDir, "playit")
+            val configDirs = listOf(
+                playitDir,
+                File(playitDir, ".config/playit_gg"),
+                File(playitDir, ".config/playit")
+            )
+            for (dir in configDirs) {
+                val toml = File(dir, "playit.toml")
+                if (toml.exists()) {
+                    val content = toml.readText()
+                    val match = Regex("""(?:secret|secret_key)\s*=\s*\"([^\"]+)\"""").find(content)
+                    if (match != null) {
+                        val secret = match.groupValues[1]
+                        if (secret.isNotBlank()) {
+                            saveSecretKey(context, secret)
+                            return secret
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return null
     }
 
     fun getLastKnownDomain(context: Context): String? {
