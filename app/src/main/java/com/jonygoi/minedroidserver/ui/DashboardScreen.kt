@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jonygoi.minedroidserver.server.*
 import com.jonygoi.minedroidserver.theme.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 
 @Composable
 fun DashboardScreen(
@@ -50,6 +50,8 @@ fun DashboardScreen(
     var serverToDelete by remember { mutableStateOf<ServerConfig?>(null) }
     var playitSessionToConfirm by remember { mutableStateOf<PlayitClaimSession?>(null) }
     var isExchangingPlayit by remember { mutableStateOf(false) }
+    var playitLiveStatus by remember { mutableStateOf("Conectando ao Playit.gg...") }
+    var manualPlayitInput by remember { mutableStateOf("") }
 
     val activeConfig = remember(servers, activeServerId) {
         servers.find { it.id == activeServerId } ?: servers.firstOrNull()
@@ -94,8 +96,46 @@ fun DashboardScreen(
         )
     }
 
-    // Playit Confirmation Dialog
+    // Playit Confirmation Dialog with real-time polling
     playitSessionToConfirm?.let { session ->
+        LaunchedEffect(session.code) {
+            playitLiveStatus = "Agente registrado! Aguardando autorização no navegador..."
+            while (isActive) {
+                delay(1500)
+                val status = PlayitManager.checkClaimStatus(session.code)
+                when (status) {
+                    PlayitClaimStatus.WAITING_FOR_BROWSER -> {
+                        playitLiveStatus = "Aguardando página abrir no navegador..."
+                    }
+                    PlayitClaimStatus.WAITING_FOR_USER_CLICK -> {
+                        playitLiveStatus = "Agente detectado! Clique em 'Add Agent' na página..."
+                    }
+                    PlayitClaimStatus.ACCEPTED -> {
+                        playitLiveStatus = "Autorizado com sucesso! Salvando credenciais..."
+                        isExchangingPlayit = true
+                        val secret = PlayitManager.exchangeClaim(session.code)
+                        isExchangingPlayit = false
+                        if (!secret.isNullOrBlank()) {
+                            PlayitManager.saveSecretKey(context, secret)
+                            playitSessionToConfirm = null
+                            Toast.makeText(
+                                context,
+                                "Conta Playit.gg vinculada com sucesso! Seus servidores agora terão domínios nominais gratuitos.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            break
+                        }
+                    }
+                    PlayitClaimStatus.REJECTED -> {
+                        Toast.makeText(context, "Vinculação cancelada no navegador.", Toast.LENGTH_SHORT).show()
+                        playitSessionToConfirm = null
+                        break
+                    }
+                    PlayitClaimStatus.ERROR -> {}
+                }
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { playitSessionToConfirm = null },
             title = {
@@ -106,56 +146,91 @@ fun DashboardScreen(
                 }
             },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(
+                        color = MinecraftCardSurface,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = MinecraftDiamond,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = playitLiveStatus,
+                                color = MinecraftDiamond,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
                     Text(
-                        "Uma página foi aberta no seu navegador para autorizar o MineDroid na sua conta do Playit.gg.",
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "1. No navegador, clique em 'Accept' ou 'Confirmar'\n2. Volte ao app e toque em 'Confirmar Vinculação'",
+                        "O agente no celular está enviando sinal constante para a página. Assim que você clicar em 'Add Agent' no site, a vinculação será concluída automaticamente!",
                         color = TextSecondary,
-                        fontSize = 13.sp
+                        fontSize = 12.sp
                     )
-                    if (isExchangingPlayit) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MinecraftEmerald)
+
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Reabrir Página de Autorização", fontSize = 11.sp, color = MinecraftDiamond)
+                    }
+
+                    HorizontalDivider(color = MinecraftBorder)
+
+                    Text(
+                        "Ou se já possui a Secret Key, cole abaixo:",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+
+                    OutlinedTextField(
+                        value = manualPlayitInput,
+                        onValueChange = { manualPlayitInput = it.trim() },
+                        placeholder = { Text("Cole sua Secret Key aqui...", fontSize = 11.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MinecraftEmerald,
+                            unfocusedBorderColor = MinecraftBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (manualPlayitInput.isNotBlank()) {
+                        Button(
+                            onClick = {
+                                PlayitManager.saveSecretKey(context, manualPlayitInput)
+                                playitSessionToConfirm = null
+                                Toast.makeText(context, "Secret Key do Playit salva com sucesso!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Salvar Chave Manual", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
                     }
                 }
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            isExchangingPlayit = true
-                            val secret = PlayitManager.exchangeClaim(session.code)
-                            isExchangingPlayit = false
-                            if (!secret.isNullOrBlank()) {
-                                PlayitManager.saveSecretKey(context, secret)
-                                playitSessionToConfirm = null
-                                Toast.makeText(
-                                    context,
-                                    "Conta Playit.gg vinculada com sucesso! Seus servidores agora terão domínios automáticos gratuitos.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "Ainda aguardando autorização no navegador. Clique em 'Accept' no site e tente novamente.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                    enabled = !isExchangingPlayit
-                ) {
-                    Text("Confirmar Vinculação", color = MinecraftObsidian, fontWeight = FontWeight.Bold)
-                }
-            },
+            confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { playitSessionToConfirm = null }) {
-                    Text("Cancelar")
+                    Text("Fechar")
                 }
             },
             containerColor = MinecraftDarkSurface,

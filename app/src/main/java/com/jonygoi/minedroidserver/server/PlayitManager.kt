@@ -15,6 +15,14 @@ data class PlayitClaimSession(
     val claimUrl: String
 )
 
+enum class PlayitClaimStatus {
+    WAITING_FOR_BROWSER,
+    WAITING_FOR_USER_CLICK,
+    ACCEPTED,
+    REJECTED,
+    ERROR
+}
+
 object PlayitManager {
 
     private const val PREFS_NAME = "minedroid_playit"
@@ -54,7 +62,7 @@ object PlayitManager {
             val url = URL("https://api.playit.gg/claim/setup")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
-            conn.connectTimeout = 12000
+            conn.connectTimeout = 15000
             conn.readTimeout = 15000
             conn.setRequestProperty("User-Agent", "playit-minecraft-plugin/0.2.0")
             conn.setRequestProperty("Content-Type", "application/json")
@@ -77,9 +85,6 @@ object PlayitManager {
                     val claimUrl = "https://playit.gg/claim/$hexCode"
                     return@withContext PlayitClaimSession(code = hexCode, claimUrl = claimUrl)
                 }
-            } else {
-                val errStr = conn.errorStream?.bufferedReader()?.use { it.readText() }
-                System.err.println("Playit claim setup error ($responseCode): $errStr")
             }
             null
         } catch (e: Exception) {
@@ -89,17 +94,16 @@ object PlayitManager {
     }
 
     /**
-     * Verifica se o usuário já confirmou o login no navegador
-     * Se confirmado ("UserAccepted"), troca o código pelo agent secret key
+     * Envia o sinal de heartbeat (ping) para a API do Playit.gg
+     * Isso avisa a página no navegador que o agente está ativo e pronto para ser vinculado!
      */
-    suspend fun exchangeClaim(code: String): String? = withContext(Dispatchers.IO) {
+    suspend fun checkClaimStatus(code: String): PlayitClaimStatus = withContext(Dispatchers.IO) {
         try {
-            // 1. Checa status da sessão via /claim/setup
             val setupUrl = URL("https://api.playit.gg/claim/setup")
             val setupConn = setupUrl.openConnection() as HttpURLConnection
             setupConn.requestMethod = "POST"
-            setupConn.connectTimeout = 12000
-            setupConn.readTimeout = 15000
+            setupConn.connectTimeout = 8000
+            setupConn.readTimeout = 8000
             setupConn.setRequestProperty("User-Agent", "playit-minecraft-plugin/0.2.0")
             setupConn.setRequestProperty("Content-Type", "application/json")
             setupConn.setRequestProperty("Accept", "application/json")
@@ -113,17 +117,29 @@ object PlayitManager {
 
             setupConn.outputStream.use { it.write(setupBody.toByteArray()) }
 
-            if (setupConn.responseCode !in 200..299) return@withContext null
-            val setupResStr = setupConn.inputStream.bufferedReader().use { it.readText() }
-            val setupJson = JSONObject(setupResStr)
-
-            val data = setupJson.optString("data", "")
-            if (data != "UserAccepted") {
-                // Usuário ainda não clicou em aceitar no site
-                return@withContext null
+            if (setupConn.responseCode in 200..299) {
+                val setupResStr = setupConn.inputStream.bufferedReader().use { it.readText() }
+                val setupJson = JSONObject(setupResStr)
+                val data = setupJson.optString("data", "")
+                return@withContext when (data) {
+                    "UserAccepted" -> PlayitClaimStatus.ACCEPTED
+                    "WaitingForUser" -> PlayitClaimStatus.WAITING_FOR_USER_CLICK
+                    "WaitingForUserVisit" -> PlayitClaimStatus.WAITING_FOR_BROWSER
+                    "UserRejected" -> PlayitClaimStatus.REJECTED
+                    else -> PlayitClaimStatus.WAITING_FOR_USER_CLICK
+                }
             }
+            PlayitClaimStatus.ERROR
+        } catch (e: Exception) {
+            PlayitClaimStatus.ERROR
+        }
+    }
 
-            // 2. Se aceito, faz exchange via /claim/exchange
+    /**
+     * Troca o código autorizado pelo Secret Key permanente do Playit.gg
+     */
+    suspend fun exchangeClaim(code: String): String? = withContext(Dispatchers.IO) {
+        try {
             val exchUrl = URL("https://api.playit.gg/claim/exchange")
             val exchConn = exchUrl.openConnection() as HttpURLConnection
             exchConn.requestMethod = "POST"
@@ -182,7 +198,7 @@ object PlayitManager {
             val conn = url.openConnection() as HttpURLConnection
             conn.instanceFollowRedirects = true
             conn.connectTimeout = 15000
-            conn.readTimeout = 30000
+            conn.readTimeout = 60000
             conn.setRequestProperty("User-Agent", "playit-minecraft-plugin/0.2.0")
             conn.connect()
 

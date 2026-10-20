@@ -9,7 +9,7 @@ enum class ServerType(val displayName: String, val category: String, val isJava:
     VANILLA("Vanilla", "Java Edition (Oficial)", true),
     BEDROCK_DEDICATED("Bedrock Dedicated (BDS)", "Bedrock Edition Nativo", false),
     POCKETMINE("PocketMine-MP", "Bedrock Edition (Leve)", false),
-    GEYSER_STANDALONE("GeyserMC Standalone", "Proxy Bedrock (Sem Vanilla/Java pesado)", false)
+    GEYSER_STANDALONE("GeyserMC Standalone", "Proxy Bedrock (Sem Vanilla/Java pesado)", true)
 }
 
 enum class DomainType(val displayName: String, val suffix: String) {

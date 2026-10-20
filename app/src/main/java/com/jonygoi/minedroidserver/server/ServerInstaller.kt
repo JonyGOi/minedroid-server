@@ -37,8 +37,12 @@ object ServerInstaller {
                 if (!serverJar.exists() || serverJar.length() < 1024) {
                     onProgress("Baixando GeyserMC Standalone...", 0.30f)
                     val geyserStandaloneUrl = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone"
-                    downloadFile(geyserStandaloneUrl, serverJar) { p ->
+                    val ok = downloadFile(geyserStandaloneUrl, serverJar) { p ->
                         onProgress("Baixando Geyser Standalone: ${(p * 100).toInt()}%", 0.30f + (p * 0.60f))
+                    }
+                    if (!ok) {
+                        onProgress("Falha ao baixar GeyserMC Standalone. Verifique sua conexão com a internet.", 0f)
+                        return@withContext false
                     }
                 }
                 onProgress("GeyserMC Standalone pronto!", 1.0f)
@@ -200,17 +204,17 @@ object ServerInstaller {
         return try {
             val url = URL(urlStr)
             conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 15000
-            conn.readTimeout = 30000
+            conn.connectTimeout = 25000
+            conn.readTimeout = 180000
             conn.instanceFollowRedirects = true
-            conn.setRequestProperty("User-Agent", "MineDroid-Server-App")
+            conn.setRequestProperty("User-Agent", "MineDroid-Server-App/1.6.1")
             conn.connect()
 
             val totalSize = conn.contentLength.toLong()
             input = conn.inputStream
             output = FileOutputStream(destination)
 
-            val buffer = ByteArray(8192)
+            val buffer = ByteArray(32768)
             var totalRead: Long = 0
             var bytesRead: Int
 
@@ -222,7 +226,7 @@ object ServerInstaller {
                 }
             }
             output.flush()
-            true
+            destination.exists() && destination.length() > 1024L
         } catch (e: Exception) {
             e.printStackTrace()
             if (destination.exists()) destination.delete()

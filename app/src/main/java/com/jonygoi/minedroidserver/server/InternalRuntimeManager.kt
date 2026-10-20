@@ -20,11 +20,11 @@ object InternalRuntimeManager {
     private const val UBUNTU_BASE_AMD64 =
         "https://cdimage.ubuntu.com/ubuntu-base/releases/22.04/release/ubuntu-base-22.04.5-base-amd64.tar.gz"
 
-    // Adoptium Eclipse Temurin OpenJDK 17 Hotspot JRE
+    // Adoptium Eclipse Temurin OpenJDK 21 Hotspot JRE (Suporte a Minecraft 1.7 até 1.21.3 e Geyser Standalone)
     private const val ADOPTIUM_JRE_ARM64 =
-        "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jre_aarch64_linux_hotspot_17.0.12_7.tar.gz"
+        "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_aarch64_linux_hotspot_21.0.12.1_1.tar.gz"
     private const val ADOPTIUM_JRE_AMD64 =
-        "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jre_x64_linux_hotspot_17.0.12_7.tar.gz"
+        "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jre_x64_linux_hotspot_21.0.12.1_1.tar.gz"
 
     fun getRootfsDirectory(context: Context): File {
         return File(context.filesDir, "internal_rootfs")
@@ -81,9 +81,14 @@ object InternalRuntimeManager {
     }
 
     /**
-     * Verifica se o Runtime OpenJDK interno já está completamente instalado
+     * Verifica se o Runtime OpenJDK 21 interno já está completamente instalado
      */
     fun isRuntimeInstalled(context: Context): Boolean {
+        val rootfs = getRootfsDirectory(context)
+        val versionMarker = File(rootfs, "opt/java_version.txt")
+        if (!versionMarker.exists() || versionMarker.readText().trim() != "21") {
+            return false
+        }
         val javaBin = getJavaExecutable(context)
         return javaBin.exists() && javaBin.length() > 10000L
     }
@@ -110,7 +115,7 @@ object InternalRuntimeManager {
     }
 
     /**
-     * Baixa e instala o ambiente OpenJDK 17 completo dentro do sandbox do aplicativo
+     * Baixa e instala o ambiente OpenJDK 21 completo dentro do sandbox do aplicativo
      */
     suspend fun prepareRuntime(
         context: Context,
@@ -125,45 +130,58 @@ object InternalRuntimeManager {
         val jreUrl = if (isArm64) ADOPTIUM_JRE_ARM64 else ADOPTIUM_JRE_AMD64
 
         val cacheBaseFile = File(context.cacheDir, "ubuntu_base.tar.gz")
-        val cacheJreFile = File(context.cacheDir, "openjdk17.tar.gz")
+        val cacheJreFile = File(context.cacheDir, "openjdk21.tar.gz")
 
         try {
             if (!rootfsDir.exists()) rootfsDir.mkdirs()
 
-            // 1. Download Base Linux (Ubuntu minimal)
-            onProgress("Baixando base do sistema integrada...", 0.05f)
-            val baseOk = downloadFileWithProgress(ubuntuUrl, cacheBaseFile) { p ->
-                onProgress("Baixando base integrada: ${(p * 100).toInt()}%", 0.05f + (p * 0.35f))
-            }
-            if (!baseOk) {
-                onProgress("Falha ao baixar base do sistema.", 0f)
-                return@withContext false
+            // 1. Download e extração da Base Linux (apenas se ainda não existir)
+            val hasBaseLinux = File(rootfsDir, "bin/sh").exists() || File(rootfsDir, "usr/bin/sh").exists()
+            if (!hasBaseLinux) {
+                onProgress("Baixando base do sistema integrada...", 0.05f)
+                val baseOk = downloadFileWithProgress(ubuntuUrl, cacheBaseFile) { p ->
+                    onProgress("Baixando base integrada: ${(p * 100).toInt()}%", 0.05f + (p * 0.35f))
+                }
+                if (!baseOk) {
+                    onProgress("Falha ao baixar base do sistema.", 0f)
+                    return@withContext false
+                }
+
+                onProgress("Extraindo base do sistema integrada...", 0.42f)
+                extractTarGz(cacheBaseFile, rootfsDir)
+                cacheBaseFile.delete()
             }
 
-            // 2. Extrair Base
-            onProgress("Extraindo base do sistema integrada...", 0.42f)
-            extractTarGz(cacheBaseFile, rootfsDir)
-            cacheBaseFile.delete()
-
-            // 3. Download OpenJDK 17
-            onProgress("Baixando OpenJDK 17 integrado...", 0.50f)
+            // 2. Download OpenJDK 21
+            onProgress("Baixando OpenJDK 21 integrado...", 0.50f)
             val jreOk = downloadFileWithProgress(jreUrl, cacheJreFile) { p ->
-                onProgress("Baixando OpenJDK 17: ${(p * 100).toInt()}%", 0.50f + (p * 0.35f))
+                onProgress("Baixando OpenJDK 21: ${(p * 100).toInt()}%", 0.50f + (p * 0.35f))
             }
             if (!jreOk) {
-                onProgress("Falha ao baixar OpenJDK 17.", 0f)
+                onProgress("Falha ao baixar OpenJDK 21.", 0f)
                 return@withContext false
             }
 
-            // 4. Extrair OpenJDK em /opt/java
-            onProgress("Instalando OpenJDK 17...", 0.88f)
+            // 3. Extrair OpenJDK em /opt/java
+            onProgress("Instalando OpenJDK 21...", 0.88f)
             val optDir = File(rootfsDir, "opt")
             if (!optDir.exists()) optDir.mkdirs()
+
+            // Remove versões anteriores de JRE para evitar conflito de classes
+            val oldJava = File(optDir, "java")
+            if (oldJava.exists()) {
+                oldJava.deleteRecursively()
+            }
+            optDir.listFiles()?.forEach { file ->
+                if (file.isDirectory && file.name.startsWith("jdk-")) {
+                    file.deleteRecursively()
+                }
+            }
 
             extractTarGz(cacheJreFile, optDir)
             cacheJreFile.delete()
 
-            // Se o JRE foi extraído dentro de uma subpasta (ex: jdk-17.0.12+7-jre), renomeia para /opt/java
+            // Se o JRE foi extraído dentro de uma subpasta (ex: jdk-21.0.12.1+1-jre), renomeia para /opt/java
             val javaTargetDir = File(optDir, "java")
             if (!javaTargetDir.exists()) {
                 val jreSubfolder = optDir.listFiles()?.firstOrNull {
@@ -174,7 +192,10 @@ object InternalRuntimeManager {
                 }
             }
 
-            // 5. Configurar permissões de execução e arquivos /proc emulados
+            // Grava marcador de versão 21
+            File(optDir, "java_version.txt").writeText("21\n")
+
+            // 4. Configurar permissões de execução e arquivos /proc emulados
             val javaBin = getJavaExecutable(context)
             javaBin.parentFile?.listFiles()?.forEach { binFile ->
                 binFile.setExecutable(true, false)
@@ -195,7 +216,7 @@ object InternalRuntimeManager {
 
             ensureFakeProcFiles(context)
 
-            onProgress("Motor Java integrado pronto com sucesso!", 1.0f)
+            onProgress("Motor Java 21 integrado pronto com sucesso!", 1.0f)
             true
         } catch (e: Exception) {
             e.printStackTrace()

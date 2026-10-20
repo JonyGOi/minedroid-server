@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.jonygoi.minedroidserver.server.*
 import com.jonygoi.minedroidserver.theme.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +48,7 @@ fun ServerCreationDialog(
     var claimLoading by remember { mutableStateOf(false) }
     var activeClaimCode by remember { mutableStateOf<String?>(null) }
     var activeClaimUrl by remember { mutableStateOf<String?>(null) }
+    var claimLiveStatus by remember { mutableStateOf("Conectando ao Playit.gg...") }
     var manualSecretKey by remember { mutableStateOf(PlayitManager.getSavedSecretKey(context) ?: "") }
 
     var ramMb by remember { mutableFloatStateOf(recommendedRam.toFloat()) }
@@ -304,28 +305,57 @@ fun ServerCreationDialog(
                                 }
 
                                 activeClaimCode?.let { code ->
-                                    Button(
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                claimLoading = true
-                                                val secret = PlayitManager.exchangeClaim(code)
-                                                claimLoading = false
-                                                if (!secret.isNullOrBlank()) {
-                                                    PlayitManager.saveSecretKey(context, secret)
-                                                    manualSecretKey = secret
-                                                    activeClaimCode = null
-                                                    activeClaimUrl = null
-                                                    Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    Toast.makeText(context, "Ainda aguardando autorização no navegador. Clique em 'Accept' no site e tente novamente.", Toast.LENGTH_LONG).show()
+                                    LaunchedEffect(code) {
+                                        claimLiveStatus = "Agente registrado! Aguardando autorização no navegador..."
+                                        while (isActive) {
+                                            delay(1500)
+                                            val status = PlayitManager.checkClaimStatus(code)
+                                            when (status) {
+                                                PlayitClaimStatus.WAITING_FOR_BROWSER -> {
+                                                    claimLiveStatus = "Aguardando página abrir no navegador..."
                                                 }
+                                                PlayitClaimStatus.WAITING_FOR_USER_CLICK -> {
+                                                    claimLiveStatus = "Agente detectado! Clique em 'Add Agent' na página..."
+                                                }
+                                                PlayitClaimStatus.ACCEPTED -> {
+                                                    claimLiveStatus = "Autorizado com sucesso! Salvando credenciais..."
+                                                    val secret = PlayitManager.exchangeClaim(code)
+                                                    if (!secret.isNullOrBlank()) {
+                                                        PlayitManager.saveSecretKey(context, secret)
+                                                        manualSecretKey = secret
+                                                        activeClaimCode = null
+                                                        activeClaimUrl = null
+                                                        Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_LONG).show()
+                                                        break
+                                                    }
+                                                }
+                                                PlayitClaimStatus.REJECTED -> {
+                                                    Toast.makeText(context, "Autorização cancelada no site.", Toast.LENGTH_SHORT).show()
+                                                    activeClaimCode = null
+                                                    break
+                                                }
+                                                PlayitClaimStatus.ERROR -> {}
                                             }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                                        }
+                                    }
+
+                                    Surface(
+                                        color = MinecraftDarkSurface,
                                         shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftDiamond.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                                     ) {
-                                        Text("CONFIRMAR VINCULAÇÃO NO APP", fontWeight = FontWeight.Bold, color = MinecraftObsidian, fontSize = 12.sp)
+                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MinecraftDiamond, strokeWidth = 2.dp)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(claimLiveStatus, color = MinecraftDiamond, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                            }
+                                            Text(
+                                                text = "O app está mantendo conexão aberta com o site. Quando você clicar em 'Add Agent' na página, ele autorizará sozinho!",
+                                                fontSize = 10.sp,
+                                                color = TextSecondary
+                                            )
+                                        }
                                     }
                                 }
 
