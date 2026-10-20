@@ -45,6 +45,7 @@ fun DashboardScreen(
     val stats by ServerManager.stats.collectAsState()
     val downloadProg by ServerManager.downloadProgress.collectAsState()
     val logs by ServerManager.logs.collectAsState()
+    val liveClaimUrl by PlayitManager.liveClaimUrl.collectAsState()
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var serverToDelete by remember { mutableStateOf<ServerConfig?>(null) }
@@ -141,13 +142,16 @@ fun DashboardScreen(
             }
         }
 
+        val liveClaim = liveClaimUrl ?: session.claimUrl.ifBlank { null }
+        val playitLogs = logs.filter { it.text.contains("[Playit.gg]") }.takeLast(8)
+
         AlertDialog(
             onDismissRequest = { playitSessionToConfirm = null },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Vincular Playit.gg")
+                    Text("Instalação do Agente Playit.gg")
                 }
             },
             text = {
@@ -162,13 +166,19 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(18.dp),
                                 color = MinecraftDiamond,
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = playitLiveStatus,
+                                text = if (activeConfig?.customDomain?.isNotBlank() == true) {
+                                    "✅ Agente conectado! Túnel ativo."
+                                } else if (!liveClaim.isNullOrBlank()) {
+                                    "Aguardando autorização no navegador..."
+                                } else {
+                                    "Iniciando agente Playit.gg nativo..."
+                                },
                                 color = MinecraftDiamond,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -176,21 +186,77 @@ fun DashboardScreen(
                         }
                     }
 
-                    Text(
-                        "O agente no celular está enviando sinal constante para a página. Assim que você clicar em 'Add Agent' no site, a vinculação será concluída automaticamente!",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-
-                    OutlinedButton(
-                        onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                    // Terminal Box Visual Interativo
+                    Surface(
+                        color = MinecraftObsidian,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MinecraftBorder),
+                        modifier = Modifier.fillMaxWidth().height(130.dp)
                     ) {
-                        Text("Reabrir Página de Autorização", fontSize = 11.sp, color = MinecraftDiamond)
+                        Column(
+                            modifier = Modifier.padding(8.dp).verticalScroll(rememberScrollState())
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Terminal, contentDescription = null, tint = MinecraftEmerald, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Terminal do Agente (Ao Vivo)", color = MinecraftEmerald, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (playitLogs.isEmpty()) {
+                                Text("Executando motor nativo Playit...", color = TextSecondary, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            } else {
+                                playitLogs.forEach { log ->
+                                    Text(
+                                        text = log.text,
+                                        color = when (log.type) {
+                                            LogType.ERROR -> MinecraftRedstone
+                                            LogType.WARN -> MinecraftGold
+                                            LogType.SYSTEM -> MinecraftDiamond
+                                            else -> TextSecondary
+                                        },
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Botão Direto para o Link de Claim
+                    if (!liveClaim.isNullOrBlank()) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(liveClaim))
+                                context.startActivity(intent)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MinecraftDiamond),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("ABRIR PÁGINA E ADICIONAR AGENTE", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+
+                    // Redefinir Agente (caso chave anterior esteja corrompida)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                PlayitTunnelProcess.stop()
+                                PlayitManager.resetSecret(context)
+                                Toast.makeText(context, "Chave apagada! Reiniciando agente...", Toast.LENGTH_SHORT).show()
+                                PlayitTunnelProcess.start(
+                                    context = context,
+                                    onLog = { msg -> ServerManager.addLog(msg) },
+                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                )
+                            }
+                        ) {
+                            Text("Limpar Chave / Resetar", color = MinecraftRedstone, fontSize = 11.sp)
+                        }
                     }
 
                     HorizontalDivider(color = MinecraftBorder)
@@ -220,15 +286,14 @@ fun DashboardScreen(
                         Button(
                             onClick = {
                                 PlayitManager.saveSecretKey(context, manualPlayitInput)
+                                PlayitTunnelProcess.stop()
                                 PlayitTunnelProcess.start(
                                     context = context,
                                     onLog = { msg -> ServerManager.addLog(msg) },
                                     onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
                                 )
                                 playitSessionToConfirm = null
-                                try {
-                                    Toast.makeText(context, "Secret Key salva! Agente conectando ao Playit.gg...", Toast.LENGTH_SHORT).show()
-                                } catch (_: Exception) {}
+                                Toast.makeText(context, "Secret Key salva! Agente conectando ao Playit.gg...", Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
                             shape = RoundedCornerShape(8.dp),
@@ -245,7 +310,7 @@ fun DashboardScreen(
                         coroutineScope.launch {
                             try {
                                 isExchangingPlayit = true
-                                val secret = PlayitManager.exchangeClaim(session.code)
+                                val secret = if (session.code.isNotBlank()) PlayitManager.exchangeClaim(session.code) else null
                                 isExchangingPlayit = false
                                 if (!secret.isNullOrBlank()) {
                                     PlayitManager.saveSecretKey(context, secret)
@@ -255,9 +320,15 @@ fun DashboardScreen(
                                         onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
                                     )
                                     playitSessionToConfirm = null
-                                    Toast.makeText(context, "Conta Playit.gg vinculada! Agente conectando...", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Conta Playit.gg vinculada! Agente conectado.", Toast.LENGTH_LONG).show()
                                 } else {
-                                    Toast.makeText(context, "Ainda aguardando autorização no site. Clique em 'Add Agent' na página.", Toast.LENGTH_SHORT).show()
+                                    val saved = PlayitManager.getSavedSecretKey(context)
+                                    if (!saved.isNullOrBlank() || activeConfig?.customDomain?.isNotBlank() == true) {
+                                        playitSessionToConfirm = null
+                                        Toast.makeText(context, "Agente ativo e conectado com sucesso!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "Ainda aguardando autorização no site. Clique em 'Add Agent' na página.", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             } catch (e: Exception) {
                                 isExchangingPlayit = false
@@ -555,13 +626,19 @@ fun DashboardScreen(
                                 TextButton(
                                     onClick = {
                                         coroutineScope.launch {
+                                            // Inicia o agente nativo imediatamente para estar online no momento em que abrir a página
+                                            PlayitTunnelProcess.start(
+                                                context = context,
+                                                onLog = { msg -> ServerManager.addLog(msg) },
+                                                onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                            )
                                             val session = PlayitManager.startClaimSession()
                                             if (session != null) {
                                                 playitSessionToConfirm = session
                                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
                                                 context.startActivity(intent)
                                             } else {
-                                                Toast.makeText(context, "Não foi possível conectar ao Playit.gg. Verifique sua conexão.", Toast.LENGTH_SHORT).show()
+                                                playitSessionToConfirm = PlayitClaimSession(code = "", claimUrl = "")
                                             }
                                         }
                                     },
@@ -569,7 +646,7 @@ fun DashboardScreen(
                                 ) {
                                     Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Vincular Conta Playit.gg para Gerar Endereço", color = MinecraftDiamond, fontSize = 11.sp)
+                                    Text("Instalar / Vincular Playit.gg (Visual)", color = MinecraftDiamond, fontSize = 11.sp)
                                 }
                             }
                         }

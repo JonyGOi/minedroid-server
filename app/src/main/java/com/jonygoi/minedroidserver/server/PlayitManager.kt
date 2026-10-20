@@ -2,6 +2,8 @@ package com.jonygoi.minedroidserver.server
 
 import android.content.Context
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -30,6 +32,28 @@ object PlayitManager {
 
     private val pollerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var activePollerJob: Job? = null
+
+    val liveClaimUrl = MutableStateFlow<String?>(null)
+
+    fun setLiveClaimUrl(url: String?) {
+        liveClaimUrl.value = url
+    }
+
+    fun resetSecret(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().remove(KEY_SECRET).remove(KEY_LAST_DOMAIN).apply()
+        liveClaimUrl.value = null
+
+        try {
+            val playitDir = File(context.filesDir, "playit")
+            val playitToml = File(playitDir, "playit.toml")
+            if (playitToml.exists()) {
+                playitToml.delete()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     fun getSavedSecretKey(context: Context): String? {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

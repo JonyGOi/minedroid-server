@@ -18,7 +18,8 @@ object PlayitTunnelProcess {
     fun start(
         context: Context,
         onLog: (LogMessage) -> Unit = {},
-        onDomainFound: (String) -> Unit = {}
+        onDomainFound: (String) -> Unit = {},
+        onClaimUrlFound: (String) -> Unit = {}
     ) {
         if (isRunning()) return
         isStarting = true
@@ -50,6 +51,11 @@ object PlayitTunnelProcess {
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
+            }
+        } else {
+            // Se não há secret salvo, remove playit.toml para que o agente gere um claim novo sem travar esperando resposta
+            if (playitToml.exists()) {
+                try { playitToml.delete() } catch (_: Exception) {}
             }
         }
 
@@ -93,7 +99,10 @@ object PlayitTunnelProcess {
                     // 1. Detectar link de reivindicação / login automático (caso ainda não autenticado)
                     val claimMatch = Regex("""https://playit\.gg/claim/([a-zA-Z0-9]+)""").find(cleanMsg)
                     if (claimMatch != null) {
-                        onLog(LogMessage("[Playit.gg] 🔗 Autorize seu servidor no navegador: ${claimMatch.value}", LogType.WARN))
+                        val claimUrl = claimMatch.value
+                        onLog(LogMessage("[Playit.gg] 🔗 Autorize seu servidor no navegador: $claimUrl", LogType.WARN))
+                        onClaimUrlFound(claimUrl)
+                        PlayitManager.setLiveClaimUrl(claimUrl)
                     }
 
                     // 2. Detectar endereço público nominal (xyz.ply.gg / joinmc.link / etc.)
