@@ -31,6 +31,7 @@ class ProcessRunner(
                 val prootBin = InternalRuntimeManager.getPRootBinary(context)
                 val rootfsDir = InternalRuntimeManager.getRootfsDirectory(context)
                 val fakeProc = InternalRuntimeManager.ensureFakeProcFiles(context)
+                val fakeDns = InternalRuntimeManager.ensureDnsFiles(context)
                 val tmpDir = File(context.filesDir, "tmp").apply {
                     mkdirs()
                     try {
@@ -52,19 +53,19 @@ class ProcessRunner(
                 if (!prootBin.exists()) {
                     onLog(LogMessage("[MineDroid] ERRO CRÍTICO: Binário nativo libproot.so não encontrado em:", LogType.ERROR))
                     onLog(LogMessage("[MineDroid] ${prootBin.absolutePath}", LogType.ERROR))
-                    onLog(LogMessage("[MineDroid] O Android não extraiu as bibliotecas nativas. Reinstale o APK v1.6.0.", LogType.ERROR))
+                    onLog(LogMessage("[MineDroid] O Android não extraiu as bibliotecas nativas. Reinstale o APK.", LogType.ERROR))
                     onStateChange(ServerState.ERROR)
                     return@launch
                 }
 
                 if (!InternalRuntimeManager.isRuntimeInstalled(context)) {
-                    onLog(LogMessage("[MineDroid] ERRO CRÍTICO: OpenJDK 17 interno não encontrado no sandbox!", LogType.ERROR))
+                    onLog(LogMessage("[MineDroid] ERRO CRÍTICO: OpenJDK 21 interno não encontrado no sandbox!", LogType.ERROR))
                     onLog(LogMessage("[MineDroid] A inicialização do motor Java falhou. Tente iniciar o servidor novamente para concluir o download.", LogType.ERROR))
                     onStateChange(ServerState.ERROR)
                     return@launch
                 }
 
-                onLog(LogMessage("[MineDroid] Executando com Motor OpenJDK 17 Integrado via PRoot nativo...", LogType.SYSTEM))
+                onLog(LogMessage("[MineDroid] Executando com Motor OpenJDK 21 Integrado via PRoot nativo...", LogType.SYSTEM))
 
                 val jvmArgs = OptimizationEngine.buildJvmArgs(config)
                 val command = mutableListOf<String>()
@@ -89,6 +90,10 @@ class ProcessRunner(
                 command.add("${fakeProc.absolutePath}/version:/proc/version")
                 command.add("-b")
                 command.add("${fakeProc.absolutePath}/vmstat:/proc/vmstat")
+                command.add("-b")
+                command.add("${fakeDns.absolutePath}/resolv.conf:/etc/resolv.conf")
+                command.add("-b")
+                command.add("${fakeDns.absolutePath}/hosts:/etc/hosts")
                 command.add("-b")
                 command.add("${tmpDir.absolutePath}:/tmp")
                 command.add("-b")

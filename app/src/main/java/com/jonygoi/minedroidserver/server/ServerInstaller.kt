@@ -149,34 +149,92 @@ object ServerInstaller {
         return when (config.serverType) {
             ServerType.PAPER -> {
                 try {
-                    val buildsApi = "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds"
-                    val jsonStr = httpGet(buildsApi) ?: return null
-                    val json = JSONObject(jsonStr)
-                    val builds = json.getJSONArray("builds")
-                    if (builds.length() > 0) {
-                        val latestBuildObj = builds.getJSONObject(builds.length() - 1)
-                        val buildNum = latestBuildObj.getInt("build")
-                        val downloads = latestBuildObj.getJSONObject("downloads")
-                        val application = downloads.getJSONObject("application")
-                        val jarName = application.getString("name")
-                        "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds/$buildNum/downloads/$jarName"
-                    } else null
+                    // Novo endpoint v3 da PaperMC (fill.papermc.io)
+                    val v3Api = "https://fill.papermc.io/v3/projects/paper/versions/${config.version}"
+                    val jsonStr = httpGet(v3Api)
+                    if (jsonStr != null) {
+                        val json = JSONObject(jsonStr)
+                        val builds = json.optJSONArray("builds")
+                        if (builds != null && builds.length() > 0) {
+                            val latestBuild = builds.getInt(0)
+                            val buildApi = "https://fill.papermc.io/v3/projects/paper/versions/${config.version}/builds/$latestBuild"
+                            val buildStr = httpGet(buildApi)
+                            if (buildStr != null) {
+                                val buildJson = JSONObject(buildStr)
+                                val downloads = buildJson.optJSONObject("downloads")
+                                val serverDef = downloads?.optJSONObject("server:default")
+                                val dUrl = serverDef?.optString("url")
+                                if (!dUrl.isNullOrBlank()) return dUrl
+                            }
+                        }
+                    }
+                    // Fallback para Purpur se Paper v3 não tiver a versão específica
+                    "https://api.purpurmc.org/v2/purpur/${config.version}/latest/download"
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    null
+                    "https://api.purpurmc.org/v2/purpur/${config.version}/latest/download"
                 }
             }
             ServerType.PURPUR -> {
                 "https://api.purpurmc.org/v2/purpur/${config.version}/latest/download"
             }
             ServerType.VANILLA -> {
-                "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds"
+                try {
+                    // Manifesto Oficial Mojang Piston Meta
+                    val manifestUrl = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+                    val manifestStr = httpGet(manifestUrl)
+                    if (manifestStr != null) {
+                        val manifestJson = JSONObject(manifestStr)
+                        val versions = manifestJson.optJSONArray("versions")
+                        if (versions != null) {
+                            for (i in 0 until versions.length()) {
+                                val vObj = versions.getJSONObject(i)
+                                if (vObj.optString("id") == config.version) {
+                                    val pkgUrl = vObj.optString("url")
+                                    val pkgStr = httpGet(pkgUrl)
+                                    if (pkgStr != null) {
+                                        val pkgJson = JSONObject(pkgStr)
+                                        val downloads = pkgJson.optJSONObject("downloads")
+                                        val serverObj = downloads?.optJSONObject("server")
+                                        val serverUrl = serverObj?.optString("url")
+                                        if (!serverUrl.isNullOrBlank()) return serverUrl
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                    }
+                    null
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    null
+                }
+            }
+            ServerType.FABRIC -> {
+                try {
+                    val loaderApi = "https://meta.fabricmc.net/v2/versions/loader/${config.version}"
+                    val loaderStr = httpGet(loaderApi)
+                    val installerApi = "https://meta.fabricmc.net/v2/versions/installer"
+                    val installerStr = httpGet(installerApi)
+                    if (loaderStr != null && installerStr != null) {
+                        val loaderArr = org.json.JSONArray(loaderStr)
+                        val installerArr = org.json.JSONArray(installerStr)
+                        if (loaderArr.length() > 0 && installerArr.length() > 0) {
+                            val loaderVer = loaderArr.getJSONObject(0).getJSONObject("loader").getString("version")
+                            val instVer = installerArr.getJSONObject(0).getString("version")
+                            "https://meta.fabricmc.net/v2/versions/loader/${config.version}/$loaderVer/$instVer/server/jar"
+                        } else null
+                    } else null
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    null
+                }
             }
             ServerType.GEYSER_STANDALONE -> {
                 "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone"
             }
             else -> {
-                "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds"
+                "https://api.purpurmc.org/v2/purpur/${config.version}/latest/download"
             }
         }
     }
@@ -185,11 +243,12 @@ object ServerInstaller {
         return try {
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 8000
-            conn.readTimeout = 8000
+            conn.connectTimeout = 15000
+            conn.readTimeout = 15000
             conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "MineDroid-Server-App")
-            if (conn.responseCode == 200) {
+            conn.setRequestProperty("User-Agent", "MineDroid-Server-App/1.6.2 (contact@minedroid.app)")
+            conn.instanceFollowRedirects = true
+            if (conn.responseCode in 200..299) {
                 conn.inputStream.bufferedReader().use { it.readText() }
             } else null
         } catch (e: Exception) {

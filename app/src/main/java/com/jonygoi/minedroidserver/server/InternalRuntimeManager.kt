@@ -264,6 +264,49 @@ object InternalRuntimeManager {
         return fakeProcDir
     }
 
+    /**
+     * Cria e configura arquivos de resolução DNS (/etc/resolv.conf e /etc/hosts)
+     * Garante que o Java e o Geyser consigam resolver serviços da Microsoft/Mojang sem UnknownHostException
+     */
+    fun ensureDnsFiles(context: Context): File {
+        val fakeDnsDir = File(context.filesDir, "fake_dns").apply { if (!exists()) mkdirs() }
+
+        val resolvFile = File(fakeDnsDir, "resolv.conf")
+        val resolvContent = buildString {
+            appendLine("nameserver 1.1.1.1")
+            appendLine("nameserver 1.0.0.1")
+            appendLine("nameserver 8.8.8.8")
+            appendLine("nameserver 8.8.4.4")
+            appendLine("options timeout:2 attempts:3")
+        }
+        resolvFile.writeText(resolvContent)
+        resolvFile.setReadable(true, false)
+
+        val hostsFile = File(fakeDnsDir, "hosts")
+        val hostsContent = buildString {
+            appendLine("127.0.0.1 localhost localhost.localdomain")
+            appendLine("::1 localhost ip6-localhost ip6-loopback")
+        }
+        hostsFile.writeText(hostsContent)
+        hostsFile.setReadable(true, false)
+
+        // Também assegura a gravação física dentro do próprio rootfs
+        try {
+            val rootfs = getRootfsDirectory(context)
+            val etcDir = File(rootfs, "etc").apply { if (!exists()) mkdirs() }
+            val rootfsResolv = File(etcDir, "resolv.conf")
+            if (rootfsResolv.exists()) rootfsResolv.delete()
+            rootfsResolv.writeText(resolvContent)
+            rootfsResolv.setReadable(true, false)
+
+            val rootfsHosts = File(etcDir, "hosts")
+            rootfsHosts.writeText(hostsContent)
+            rootfsHosts.setReadable(true, false)
+        } catch (_: Exception) {}
+
+        return fakeDnsDir
+    }
+
     private fun downloadFileWithProgress(
         urlStr: String,
         dest: File,
