@@ -89,13 +89,14 @@ object ServerManager {
         _servers.value = loaded
         if (loaded.isNotEmpty()) {
             _activeServerId.value = loaded.first().id
+        } else {
+            _activeServerId.value = ""
         }
     }
 
-    fun getActiveConfig(): ServerConfig {
+    fun getActiveConfig(): ServerConfig? {
         return _servers.value.find { it.id == _activeServerId.value }
             ?: _servers.value.firstOrNull()
-            ?: ServerConfig()
     }
 
     fun selectServer(id: String) {
@@ -123,7 +124,7 @@ object ServerManager {
     }
 
     fun updateActiveServerDomain(domain: String) {
-        val active = getActiveConfig()
+        val active = getActiveConfig() ?: return
         if (active.customDomain != domain) {
             val updated = active.copy(customDomain = domain)
             appContext?.let { ctx ->
@@ -134,7 +135,6 @@ object ServerManager {
     }
 
     fun deleteServer(context: Context, id: String) {
-        // Prevent deleting currently running server
         if (_activeServerId.value == id && (_state.value != ServerState.STOPPED && _state.value != ServerState.ERROR)) {
             return
         }
@@ -142,14 +142,9 @@ object ServerManager {
         current.removeAll { it.id == id }
         ServerStorage.deleteServerDirectory(context, id)
 
-        if (current.isEmpty()) {
-            val defaultServer = ServerConfig(name = "Novo Servidor")
-            current.add(defaultServer)
-        }
-
         _servers.value = current
         if (_activeServerId.value == id) {
-            _activeServerId.value = current.first().id
+            _activeServerId.value = current.firstOrNull()?.id ?: ""
         }
         ServerStorage.saveServers(context, current)
     }
@@ -176,7 +171,7 @@ object ServerManager {
             _activeServerId.value = targetServerId
         }
 
-        val cfg = getActiveConfig()
+        val cfg = getActiveConfig() ?: return
 
         // Start Foreground Service
         val serviceIntent = Intent(context, MinecraftServerService::class.java).apply {

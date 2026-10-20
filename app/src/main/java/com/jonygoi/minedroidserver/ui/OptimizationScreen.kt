@@ -29,7 +29,7 @@ fun OptimizationScreen() {
     val context = LocalContext.current
     val servers by ServerManager.servers.collectAsState()
     val activeServerId by ServerManager.activeServerId.collectAsState()
-    val config = remember(servers, activeServerId) { ServerManager.getActiveConfig() }
+    val config = remember(servers, activeServerId) { ServerManager.getActiveConfig() ?: ServerConfig() }
 
     var isIgnoringBattery by remember {
         mutableStateOf(OptimizationEngine.isIgnoringBatteryOptimizations(context))

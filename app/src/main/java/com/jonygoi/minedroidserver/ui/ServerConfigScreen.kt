@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jonygoi.minedroidserver.server.*
@@ -27,6 +28,36 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
     val servers by ServerManager.servers.collectAsState()
     val activeServerId by ServerManager.activeServerId.collectAsState()
     val currentConfig = remember(servers, activeServerId) { ServerManager.getActiveConfig() }
+
+    if (currentConfig == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MinecraftObsidian)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null, tint = TextMuted, modifier = Modifier.size(48.dp))
+                Text(
+                    text = "Nenhum Servidor Selecionado",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Crie seu primeiro servidor na aba 'Servidores' para poder configurá-lo aqui.",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        return
+    }
 
     var serverName by remember(currentConfig) { mutableStateOf(currentConfig.name) }
     var domainAddress by remember(currentConfig) { mutableStateOf(currentConfig.customDomain) }
@@ -150,7 +181,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                             text = type.displayName,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            color = if (type == ServerType.GEYSER_STANDALONE) MinecraftDiamond else TextPrimary
                         )
                         Text(
                             text = type.category,
@@ -162,92 +193,65 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             }
         }
 
-        // Section: Versão do Minecraft
-        Text(
-            text = "Versão do Minecraft",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = MinecraftEmerald
-        )
+        // Section: Versão do Minecraft (se não for Geyser Standalone)
+        if (selectedType != ServerType.GEYSER_STANDALONE) {
+            Text(
+                text = "Versão do Minecraft",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = MinecraftEmerald
+            )
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ServerConfig.AVAILABLE_VERSIONS.take(4).forEach { ver ->
-                val isVerSelected = selectedVersion == ver
-                FilterChip(
-                    selected = isVerSelected,
-                    onClick = { selectedVersion = ver },
-                    label = { Text(ver) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MinecraftEmerald,
-                        selectedLabelColor = MinecraftObsidian,
-                        containerColor = MinecraftDarkSurface,
-                        labelColor = TextPrimary
-                    )
-                )
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ServerConfig.AVAILABLE_VERSIONS.drop(4).forEach { ver ->
-                val isVerSelected = selectedVersion == ver
-                FilterChip(
-                    selected = isVerSelected,
-                    onClick = { selectedVersion = ver },
-                    label = { Text(ver) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MinecraftEmerald,
-                        selectedLabelColor = MinecraftObsidian,
-                        containerColor = MinecraftDarkSurface,
-                        labelColor = TextPrimary
-                    )
-                )
-            }
-        }
-
-        // Section: Crossplay GeyserMC
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Crossplay GeyserMC (Bedrock + Java)",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MinecraftLapis
-                        )
-                        Text(
-                            text = "Permite que celulares, consoles (Switch, PS, Xbox) e Win10 joguem juntos no mesmo servidor Java!",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
-                    }
-                    Switch(
-                        checked = enableGeyser,
-                        onCheckedChange = { enableGeyser = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MinecraftObsidian,
-                            checkedTrackColor = MinecraftLapis
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ServerConfig.AVAILABLE_VERSIONS.take(4).forEach { ver ->
+                    val isVerSelected = selectedVersion == ver
+                    FilterChip(
+                        selected = isVerSelected,
+                        onClick = { selectedVersion = ver },
+                        label = { Text(ver) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MinecraftEmerald,
+                            selectedLabelColor = MinecraftObsidian,
+                            containerColor = MinecraftDarkSurface,
+                            labelColor = TextPrimary
                         )
                     )
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ServerConfig.AVAILABLE_VERSIONS.drop(4).take(4).forEach { ver ->
+                    val isVerSelected = selectedVersion == ver
+                    FilterChip(
+                        selected = isVerSelected,
+                        onClick = { selectedVersion = ver },
+                        label = { Text(ver) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MinecraftEmerald,
+                            selectedLabelColor = MinecraftObsidian,
+                            containerColor = MinecraftDarkSurface,
+                            labelColor = TextPrimary
+                        )
+                    )
+                }
+            }
+        }
 
-                if (enableGeyser) {
-                    Spacer(modifier = Modifier.height(10.dp))
+        // Section: Crossplay GeyserMC (se for Java)
+        if (selectedType.isJava) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -255,22 +259,53 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Ativar Floodgate",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextPrimary
+                                text = "Crossplay GeyserMC (Bedrock + Java)",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MinecraftLapis
                             )
                             Text(
-                                text = "Jogadores Bedrock entram direto, sem precisar de conta de PC Java.",
-                                fontSize = 11.sp,
-                                color = TextMuted
+                                text = "Permite que celulares, consoles (Switch, PS, Xbox) e Win10 joguem juntos no mesmo servidor Java!",
+                                fontSize = 12.sp,
+                                color = TextSecondary
                             )
                         }
-                        Checkbox(
-                            checked = enableFloodgate,
-                            onCheckedChange = { enableFloodgate = it },
-                            colors = CheckboxDefaults.colors(checkedColor = MinecraftLapis)
+                        Switch(
+                            checked = enableGeyser,
+                            onCheckedChange = { enableGeyser = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MinecraftObsidian,
+                                checkedTrackColor = MinecraftLapis
+                            )
                         )
+                    }
+
+                    if (enableGeyser) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Ativar Floodgate",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Jogadores Bedrock entram direto, sem precisar de conta de PC Java.",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            }
+                            Checkbox(
+                                checked = enableFloodgate,
+                                onCheckedChange = { enableFloodgate = it },
+                                colors = CheckboxDefaults.colors(checkedColor = MinecraftLapis)
+                            )
+                        }
                     }
                 }
             }
@@ -354,130 +389,132 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             }
         }
 
-        // Section: Configurações do Jogo (server.properties)
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Section: Configurações do Jogo (server.properties se for Java)
+        if (selectedType.isJava) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
             ) {
-                Text(
-                    text = "Opções do Jogo (server.properties)",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-
-                // MOTD
-                OutlinedTextField(
-                    value = motd,
-                    onValueChange = { motd = it },
-                    label = { Text("Nome do Servidor (MOTD)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MinecraftEmerald,
-                        unfocusedBorderColor = MinecraftBorder
-                    )
-                )
-
-                // Modo Pirata / Original
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (!onlineMode) "Modo Pirata + Original (Recomendado)" else "Somente Contas Originais",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
+                    Text(
+                        text = "Opções do Jogo (server.properties)",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+
+                    // MOTD
+                    OutlinedTextField(
+                        value = motd,
+                        onValueChange = { motd = it },
+                        label = { Text("Nome do Servidor (MOTD)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MinecraftEmerald,
+                            unfocusedBorderColor = MinecraftBorder
                         )
+                    )
+
+                    // Modo Pirata / Original
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (!onlineMode) "Modo Pirata + Original (Recomendado)" else "Somente Contas Originais",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = if (!onlineMode) "Permite contas TLauncher, Pojav, etc." else "Exige conta oficial da Microsoft",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
+                        }
+                        Switch(
+                            checked = !onlineMode,
+                            onCheckedChange = { onlineMode = !it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MinecraftObsidian,
+                                checkedTrackColor = MinecraftEmerald
+                            )
+                        )
+                    }
+
+                    // PvP
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "Combate PvP Ativado", fontSize = 13.sp, color = TextPrimary)
+                        Switch(
+                            checked = pvp,
+                            onCheckedChange = { pvp = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = MinecraftObsidian,
+                                checkedTrackColor = MinecraftEmerald
+                            )
+                        )
+                    }
+
+                    // Distancia de Renderizacao (View Distance)
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "Distância de Renderização (Chunks)", fontSize = 13.sp, color = TextPrimary)
+                            Text(text = "${viewDistance.toInt()} chunks", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MinecraftEmerald)
+                        }
                         Text(
-                            text = if (!onlineMode) "Permite contas TLauncher, Pojav, etc." else "Exige conta oficial da Microsoft",
+                            text = "Valores entre 4 e 6 são recomendados para evitar superaquecimento no celular.",
                             fontSize = 11.sp,
                             color = TextMuted
                         )
+                        Slider(
+                            value = viewDistance,
+                            onValueChange = { viewDistance = it },
+                            valueRange = 2f..12f,
+                            steps = 9,
+                            colors = SliderDefaults.colors(
+                                thumbColor = MinecraftEmerald,
+                                activeTrackColor = MinecraftEmerald,
+                                inactiveTrackColor = MinecraftCardSurface
+                            )
+                        )
                     }
-                    Switch(
-                        checked = !onlineMode,
-                        onCheckedChange = { onlineMode = !it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MinecraftObsidian,
-                            checkedTrackColor = MinecraftEmerald
-                        )
-                    )
-                }
 
-                // PvP
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Combate PvP Ativado", fontSize = 13.sp, color = TextPrimary)
-                    Switch(
-                        checked = pvp,
-                        onCheckedChange = { pvp = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MinecraftObsidian,
-                            checkedTrackColor = MinecraftEmerald
-                        )
-                    )
-                }
-
-                // Distancia de Renderizacao (View Distance)
-                Column {
+                    // Max Players
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "Distância de Renderização (Chunks)", fontSize = 13.sp, color = TextPrimary)
-                        Text(text = "${viewDistance.toInt()} chunks", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MinecraftEmerald)
-                    }
-                    Text(
-                        text = "Valores entre 4 e 6 são recomendados para evitar superaquecimento no celular.",
-                        fontSize = 11.sp,
-                        color = TextMuted
-                    )
-                    Slider(
-                        value = viewDistance,
-                        onValueChange = { viewDistance = it },
-                        valueRange = 2f..12f,
-                        steps = 9,
-                        colors = SliderDefaults.colors(
-                            thumbColor = MinecraftEmerald,
-                            activeTrackColor = MinecraftEmerald,
-                            inactiveTrackColor = MinecraftCardSurface
-                        )
-                    )
-                }
-
-                // Max Players
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Limite de Jogadores: $maxPlayers", fontSize = 13.sp, color = TextPrimary)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            onClick = { if (maxPlayers > 2) maxPlayers -= 2 },
-                            contentPadding = PaddingValues(horizontal = 12.dp)
-                        ) {
-                            Text("-")
-                        }
-                        FilledTonalButton(
-                            onClick = { if (maxPlayers < 50) maxPlayers += 2 },
-                            contentPadding = PaddingValues(horizontal = 12.dp)
-                        ) {
-                            Text("+")
+                        Text(text = "Limite de Jogadores: $maxPlayers", fontSize = 13.sp, color = TextPrimary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = { if (maxPlayers > 2) maxPlayers -= 2 },
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Text("-")
+                            }
+                            FilledTonalButton(
+                                onClick = { if (maxPlayers < 50) maxPlayers += 2 },
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Text("+")
+                            }
                         }
                     }
                 }
@@ -489,7 +526,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             onClick = {
                 val updatedConfig = currentConfig.copy(
                     name = serverName.ifBlank { "Servidor Minecraft" },
-                    customDomain = domainAddress.ifBlank { "meu-mundo.craft.gg" },
+                    customDomain = domainAddress,
                     serverType = selectedType,
                     version = selectedVersion,
                     allocatedRamMb = ramMb.toInt(),

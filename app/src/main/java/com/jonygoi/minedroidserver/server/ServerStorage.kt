@@ -18,12 +18,7 @@ object ServerStorage {
     fun loadServers(context: Context): List<ServerConfig> {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) {
-            val defaultServer = ServerConfig(
-                name = "Servidor Principal (Survival)",
-                customDomain = "meu-mundo.craft.gg"
-            )
-            saveServers(context, listOf(defaultServer))
-            return listOf(defaultServer)
+            return emptyList()
         }
 
         return try {
@@ -36,9 +31,10 @@ object ServerStorage {
                 list.add(
                     ServerConfig(
                         id = obj.optString("id", java.util.UUID.randomUUID().toString()),
-                        name = obj.optString("name", "Servidor Minecraft"),
-                        customDomain = obj.optString("customDomain", "meu-mundo.craft.gg"),
+                        name = obj.optString("name", "Servidor"),
+                        customDomain = obj.optString("customDomain", ""),
                         domainType = DomainType.valueOf(obj.optString("domainType", DomainType.PLAYIT.name)),
+                        enablePlayitTunnel = obj.optBoolean("enablePlayitTunnel", true),
                         serverType = ServerType.valueOf(obj.optString("serverType", ServerType.PAPER.name)),
                         version = obj.optString("version", "1.21.1"),
                         allocatedRamMb = obj.optInt("allocatedRamMb", 1536),
@@ -60,15 +56,10 @@ object ServerStorage {
                     )
                 )
             }
-
-            if (list.isEmpty()) {
-                val defaultServer = ServerConfig(name = "Servidor Principal")
-                listOf(defaultServer)
-            } else list
-
+            list
         } catch (e: Exception) {
             e.printStackTrace()
-            listOf(ServerConfig())
+            emptyList()
         }
     }
 
@@ -83,6 +74,7 @@ object ServerStorage {
                     put("name", s.name)
                     put("customDomain", s.customDomain)
                     put("domainType", s.domainType.name)
+                    put("enablePlayitTunnel", s.enablePlayitTunnel)
                     put("serverType", s.serverType.name)
                     put("version", s.version)
                     put("allocatedRamMb", s.allocatedRamMb)
