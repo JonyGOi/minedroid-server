@@ -3,7 +3,10 @@ package com.jonygoi.minedroidserver.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jonygoi.minedroidserver.server.*
 import com.jonygoi.minedroidserver.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun DashboardScreen(
@@ -34,6 +38,7 @@ fun DashboardScreen(
     onNavigateToConfig: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val servers by ServerManager.servers.collectAsState()
     val activeServerId by ServerManager.activeServerId.collectAsState()
     val state by ServerManager.state.collectAsState()
@@ -64,16 +69,16 @@ fun DashboardScreen(
         AlertDialog(
             onDismissRequest = { serverToDelete = null },
             title = { Text("Excluir Servidor") },
-            text = { Text("Deseja realmente excluir o servidor '${s.name}'? Todos os arquivos e mundos deste servidor serão apagados.") },
+            text = { Text("Deseja realmente apagar o servidor '${s.name}'? Todos os arquivos do mundo e configurações serão excluídos permanentemente.") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         ServerManager.deleteServer(context, s.id)
                         serverToDelete = null
-                        Toast.makeText(context, "Servidor removido", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Servidor excluído com sucesso!", Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("Excluir", color = MinecraftRedstone, fontWeight = FontWeight.Bold)
+                    Text("Sim, Excluir", color = MinecraftRedstone, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -223,7 +228,7 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Endereço Java (PC / Pojav):",
                                     fontSize = 10.sp,
@@ -238,15 +243,17 @@ fun DashboardScreen(
                                     fontFamily = FontFamily.Monospace
                                 )
                             }
-                            IconButton(
-                                onClick = { copyToClipboard(context, s.friendlyJavaAddress) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            if (s.customDomain.isNotBlank()) {
+                                IconButton(
+                                    onClick = { copyToClipboard(context, s.friendlyJavaAddress) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
 
-                        if (s.enableGeyser) {
+                        if (s.enableGeyser || s.serverType == ServerType.GEYSER_STANDALONE) {
                             HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
                             // Bedrock Address
                             Row(
@@ -254,7 +261,7 @@ fun DashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "Endereço Bedrock (Celular / Console):",
                                         fontSize = 10.sp,
@@ -269,12 +276,36 @@ fun DashboardScreen(
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
-                                IconButton(
-                                    onClick = { copyToClipboard(context, s.friendlyBedrockAddress) },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                if (s.customDomain.isNotBlank()) {
+                                    IconButton(
+                                        onClick = { copyToClipboard(context, s.friendlyBedrockAddress) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                    }
                                 }
+                            }
+                        }
+
+                        // Playit Claim Helper if domain not yet resolved
+                        if (s.enablePlayitTunnel && s.customDomain.isBlank()) {
+                            TextButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val session = PlayitManager.startClaimSession()
+                                        if (session != null) {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
+                                            context.startActivity(intent)
+                                        } else {
+                                            Toast.makeText(context, "Verifique sua conexão com a internet", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Vincular Conta Playit.gg para Gerar Endereço", color = MinecraftDiamond, fontSize = 11.sp)
                             }
                         }
                     }
@@ -319,7 +350,7 @@ fun DashboardScreen(
                             modifier = Modifier.height(44.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MinecraftBorder)
+                            border = BorderStroke(1.dp, MinecraftBorder)
                         ) {
                             Icon(Icons.Default.Terminal, contentDescription = "Terminal", modifier = Modifier.size(18.dp))
                         }
@@ -333,18 +364,22 @@ fun DashboardScreen(
                             modifier = Modifier.height(44.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MinecraftBorder)
+                            border = BorderStroke(1.dp, MinecraftBorder)
                         ) {
                             Icon(Icons.Default.Settings, contentDescription = "Configurar", modifier = Modifier.size(18.dp))
                         }
 
-                        // Delete Button (only if not currently running)
-                        if (!isServerRunning && servers.size > 1) {
+                        // Delete Button: PROMINENT AND ALWAYS VISIBLE (quando nao estiver rodando)
+                        if (!isServerRunning) {
                             IconButton(
                                 onClick = { serverToDelete = s },
                                 modifier = Modifier.size(44.dp)
                             ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = "Excluir", tint = MinecraftRedstone.copy(alpha = 0.8f))
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = "Excluir Servidor",
+                                    tint = MinecraftRedstone
+                                )
                             }
                         }
                     }

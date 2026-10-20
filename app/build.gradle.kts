@@ -11,19 +11,20 @@ android {
         applicationId = "com.jonygoi.minedroidserver"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.2.0"
     }
 
     signingConfigs {
         create("release") {
             storeFile = file("keystore/release.jks")
-            storePassword = "minedroid2026"
-            keyAlias = "minedroid"
-            keyPassword = "minedroid2026"
+            storePassword = "legoNfc2026!"
+            keyAlias = "legonfc"
+            keyPassword = "legoNfc2026!"
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true
+            enableV4Signing = true
         }
     }
 

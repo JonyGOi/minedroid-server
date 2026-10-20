@@ -79,8 +79,10 @@ object ServerManager {
 
     private var processRunner: ProcessRunner? = null
     private var initialized = false
+    private var appContext: Context? = null
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         if (initialized) return
         initialized = true
         val loaded = ServerStorage.loadServers(context)
@@ -120,7 +122,19 @@ object ServerManager {
         }
     }
 
+    fun updateActiveServerDomain(domain: String) {
+        val active = getActiveConfig()
+        if (active.customDomain != domain) {
+            val updated = active.copy(customDomain = domain)
+            appContext?.let { ctx ->
+                updateServer(ctx, updated)
+                PlayitManager.saveLastKnownDomain(ctx, domain)
+            }
+        }
+    }
+
     fun deleteServer(context: Context, id: String) {
+        // Prevent deleting currently running server
         if (_activeServerId.value == id && (_state.value != ServerState.STOPPED && _state.value != ServerState.ERROR)) {
             return
         }
@@ -129,7 +143,7 @@ object ServerManager {
         ServerStorage.deleteServerDirectory(context, id)
 
         if (current.isEmpty()) {
-            val defaultServer = ServerConfig(name = "Servidor Principal")
+            val defaultServer = ServerConfig(name = "Novo Servidor")
             current.add(defaultServer)
         }
 
@@ -193,7 +207,13 @@ object ServerManager {
 
             processRunner = ProcessRunner(
                 context = context,
-                onLog = { logMsg -> addLog(logMsg) },
+                onLog = { logMsg ->
+                    addLog(logMsg)
+                    val domain = PlayitManager.parsePlayitDomainFromLog(logMsg.text)
+                    if (domain != null) {
+                        updateActiveServerDomain(domain)
+                    }
+                },
                 onStateChange = { newState -> _state.value = newState },
                 onStatsUpdate = { uptime, players ->
                     val (totalRam, availRam) = OptimizationEngine.getDeviceRamInfo(context)

@@ -31,6 +31,20 @@ object ServerInstaller {
         val serverJar = File(serverDir, "server.jar")
 
         try {
+            // Caso especial: GeyserMC Standalone (Proxy puro sem servidor Vanilla/Java)
+            if (config.serverType == ServerType.GEYSER_STANDALONE) {
+                onProgress("Configurando GeyserMC Standalone Proxy...", 0.10f)
+                if (!serverJar.exists() || serverJar.length() < 1024) {
+                    onProgress("Baixando GeyserMC Standalone...", 0.30f)
+                    val geyserStandaloneUrl = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone"
+                    downloadFile(geyserStandaloneUrl, serverJar) { p ->
+                        onProgress("Baixando Geyser Standalone: ${(p * 100).toInt()}%", 0.30f + (p * 0.60f))
+                    }
+                }
+                onProgress("GeyserMC Standalone pronto!", 1.0f)
+                return@withContext true
+            }
+
             // 1. Accept EULA automatically
             onProgress("Aceitando EULA do Minecraft...", 0.05f)
             val eulaFile = File(serverDir, "eula.txt")
@@ -48,7 +62,7 @@ object ServerInstaller {
                 if (downloadUrl != null) {
                     onProgress("Baixando ${config.serverType.displayName}...", 0.20f)
                     val downloaded = downloadFile(downloadUrl, serverJar) { fileProgress ->
-                        val mapped = 0.20f + (fileProgress * 0.50f)
+                        val mapped = 0.20f + (fileProgress * 0.45f)
                         onProgress("Baixando servidor: ${(fileProgress * 100).toInt()}%", mapped)
                     }
                     if (!downloaded) {
@@ -64,23 +78,30 @@ object ServerInstaller {
                 val geyserJar = File(pluginsDir, "Geyser-Spigot.jar")
 
                 if (!geyserJar.exists() || geyserJar.length() < 1024) {
-                    onProgress("Baixando GeyserMC (Crossplay Bedrock)...", 0.75f)
+                    onProgress("Baixando GeyserMC (Crossplay Bedrock)...", 0.68f)
                     val geyserUrl = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
                     downloadFile(geyserUrl, geyserJar) { p ->
-                        onProgress("Baixando GeyserMC: ${(p * 100).toInt()}%", 0.75f + (p * 0.15f))
+                        onProgress("Baixando GeyserMC: ${(p * 100).toInt()}%", 0.68f + (p * 0.12f))
                     }
                 }
 
                 if (config.enableFloodgate) {
                     val floodgateJar = File(pluginsDir, "floodgate-spigot.jar")
                     if (!floodgateJar.exists() || floodgateJar.length() < 1024) {
-                        onProgress("Baixando Floodgate (Entrada sem conta Java)...", 0.90f)
+                        onProgress("Baixando Floodgate (Entrada sem conta Java)...", 0.80f)
                         val floodgateUrl = "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
                         downloadFile(floodgateUrl, floodgateJar) { p ->
-                            onProgress("Baixando Floodgate: ${(p * 100).toInt()}%", 0.90f + (p * 0.08f))
+                            onProgress("Baixando Floodgate: ${(p * 100).toInt()}%", 0.80f + (p * 0.08f))
                         }
                     }
                 }
+            }
+
+            // 5. Download Playit.gg Plugin if Playit tunnel is enabled
+            if (config.enablePlayitTunnel && config.serverType.isJava) {
+                val pluginsDir = getPluginsDirectory(context, config.id)
+                onProgress("Configurando túnel automático Playit.gg...", 0.90f)
+                PlayitManager.downloadPlayitPlugin(pluginsDir)
             }
 
             onProgress("Tudo pronto para iniciar!", 1.0f)
@@ -141,6 +162,9 @@ object ServerInstaller {
             }
             ServerType.VANILLA -> {
                 "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds"
+            }
+            ServerType.GEYSER_STANDALONE -> {
+                "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone"
             }
             else -> {
                 "https://api.papermc.io/v2/projects/paper/versions/${config.version}/builds"

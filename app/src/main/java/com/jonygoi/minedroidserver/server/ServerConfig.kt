@@ -7,21 +7,23 @@ enum class ServerType(val displayName: String, val category: String, val isJava:
     PURPUR("Purpur", "Java Edition (Ultra Otimizado)", true),
     FABRIC("Fabric", "Java Edition (Modded)", true),
     VANILLA("Vanilla", "Java Edition (Oficial)", true),
-    BEDROCK_DEDICATED("Bedrock Dedicated (BDS)", "Bedrock Edition", false),
-    POCKETMINE("PocketMine-MP", "Bedrock Edition (Leve)", false)
+    BEDROCK_DEDICATED("Bedrock Dedicated (BDS)", "Bedrock Edition Nativo", false),
+    POCKETMINE("PocketMine-MP", "Bedrock Edition (Leve)", false),
+    GEYSER_STANDALONE("GeyserMC Standalone", "Proxy Bedrock (Sem Vanilla/Java pesado)", false)
 }
 
 enum class DomainType(val displayName: String, val suffix: String) {
-    PLAYIT("Playit.gg / Craft.gg (Global na Internet)", ".craft.gg"),
+    PLAYIT("Playit.gg (Túnel Automático com Domínio Real)", ".playit.gg"),
     LOCAL_MDNS("Rede Local mDNS (.local)", ".local"),
-    CUSTOM("Domínio Próprio (DDNS / DNS)", "")
+    CUSTOM("Domínio / IP Próprio", "")
 }
 
 data class ServerConfig(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "Meu Servidor Minecraft",
-    val customDomain: String = "meu-mundo.craft.gg",
+    val customDomain: String = "",
     val domainType: DomainType = DomainType.PLAYIT,
+    val enablePlayitTunnel: Boolean = true,
     val serverType: ServerType = ServerType.PAPER,
     val version: String = "1.21.1",
     val allocatedRamMb: Int = 1536,
@@ -42,30 +44,51 @@ data class ServerConfig(
     val simulationDistance: Int = 4
 ) {
     val friendlyJavaAddress: String
-        get() = if (customDomain.isNotBlank()) {
-            if (customDomain.contains(":")) customDomain else "$customDomain:$serverPort"
-        } else {
-            "servidor.local:$serverPort"
+        get() = when {
+            customDomain.isNotBlank() -> {
+                if (customDomain.contains(":")) customDomain else "$customDomain:$serverPort"
+            }
+            enablePlayitTunnel -> "Aguardando túnel Playit.gg..."
+            else -> "servidor.local:$serverPort"
         }
 
     val friendlyBedrockAddress: String
-        get() = if (customDomain.isNotBlank()) {
-            val base = customDomain.split(":").first()
-            "$base:$geyserPort"
-        } else {
-            "servidor.local:$geyserPort"
+        get() = when {
+            customDomain.isNotBlank() -> {
+                val base = customDomain.split(":").first()
+                "$base:$geyserPort"
+            }
+            enablePlayitTunnel -> "Aguardando túnel Playit.gg..."
+            else -> "servidor.local:$geyserPort"
         }
 
     companion object {
         val AVAILABLE_VERSIONS = listOf(
+            "1.21.3",
+            "1.21.2",
             "1.21.1",
             "1.21",
+            "1.20.6",
             "1.20.4",
             "1.20.2",
             "1.20.1",
+            "1.20",
             "1.19.4",
+            "1.19.3",
+            "1.19.2",
+            "1.19.1",
+            "1.19",
             "1.18.2",
-            "1.16.5"
+            "1.18.1",
+            "1.18",
+            "1.17.1",
+            "1.16.5",
+            "1.15.2",
+            "1.14.4",
+            "1.13.2",
+            "1.12.2",
+            "1.8.8",
+            "1.7.10"
         )
     }
 }

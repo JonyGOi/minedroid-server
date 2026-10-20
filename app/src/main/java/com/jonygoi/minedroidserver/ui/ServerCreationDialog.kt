@@ -1,5 +1,8 @@
 package com.jonygoi.minedroidserver.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,7 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,23 +23,32 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.jonygoi.minedroidserver.server.*
 import com.jonygoi.minedroidserver.theme.*
+import kotlinx.coroutines.launch
 import java.util.UUID
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerCreationDialog(
     onDismiss: () -> Unit,
     onServerCreated: (ServerConfig) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val (totalRam, _) = remember { OptimizationEngine.getDeviceRamInfo(context) }
     val recommendedRam = remember { OptimizationEngine.getRecommendedRam(totalRam) }
     val maxSelectableRam = if (totalRam > 1024) (totalRam - 512).toFloat() else 1024f
 
     var name by remember { mutableStateOf("Mundo dos Amigos") }
-    var domainName by remember { mutableStateOf("meu-servidor.craft.gg") }
-    var domainType by remember { mutableStateOf(DomainType.PLAYIT) }
     var selectedType by remember { mutableStateOf(ServerType.PAPER) }
     var selectedVersion by remember { mutableStateOf("1.21.1") }
+    var versionExpanded by remember { mutableStateOf(false) }
+
+    var enablePlayit by remember { mutableStateOf(true) }
+    var customDomain by remember { mutableStateOf("") }
+    var claimLoading by remember { mutableStateOf(false) }
+    var activeClaimCode by remember { mutableStateOf<String?>(null) }
+    var activeClaimUrl by remember { mutableStateOf<String?>(null) }
+
     var ramMb by remember { mutableFloatStateOf(recommendedRam.toFloat()) }
     var enableGeyser by remember { mutableStateOf(true) }
     var enableFloodgate by remember { mutableStateOf(true) }
@@ -49,7 +61,7 @@ fun ServerCreationDialog(
             colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.90f)
+                .fillMaxHeight(0.92f)
                 .border(1.dp, MinecraftBorder, RoundedCornerShape(16.dp))
         ) {
             Column(
@@ -71,7 +83,7 @@ fun ServerCreationDialog(
                             color = TextPrimary
                         )
                         Text(
-                            text = "Configuração guiada e automatizada",
+                            text = "Configuração completa e automatizada",
                             fontSize = 12.sp,
                             color = TextSecondary
                         )
@@ -96,7 +108,7 @@ fun ServerCreationDialog(
                         value = name,
                         onValueChange = { name = it },
                         label = { Text("Nome do Servidor") },
-                        placeholder = { Text("Ex: Survival dos Amigos") },
+                        placeholder = { Text("Ex: Survival com a Galera") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -105,35 +117,7 @@ fun ServerCreationDialog(
                         )
                     )
 
-                    // 2. Endereço Amigável (Nome de Domínio)
-                    Column {
-                        Text(
-                            text = "Endereço Amigável (Domínio para Conexão)",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MinecraftDiamond
-                        )
-                        Text(
-                            text = "Em vez de um número de IP difícil, use um endereço nominal para passar aos amigos.",
-                            fontSize = 11.sp,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = domainName,
-                            onValueChange = { domainName = it },
-                            label = { Text("Endereço / Hostname") },
-                            placeholder = { Text("Ex: amigos.craft.gg ou servidor.local") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MinecraftDiamond,
-                                unfocusedBorderColor = MinecraftBorder
-                            )
-                        )
-                    }
-
-                    // 3. Motor do Servidor
+                    // 2. Motor do Servidor
                     Column {
                         Text(
                             text = "Motor do Servidor (Software)",
@@ -171,7 +155,7 @@ fun ServerCreationDialog(
                                         text = type.displayName,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
+                                        color = if (type == ServerType.GEYSER_STANDALONE) MinecraftDiamond else TextPrimary
                                     )
                                     Text(
                                         text = type.category,
@@ -184,42 +168,59 @@ fun ServerCreationDialog(
                         }
                     }
 
-                    // 4. Versão
-                    Column {
-                        Text(
-                            text = "Versão do Minecraft",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            ServerConfig.AVAILABLE_VERSIONS.take(4).forEach { ver ->
-                                FilterChip(
-                                    selected = selectedVersion == ver,
-                                    onClick = { selectedVersion = ver },
-                                    label = { Text(ver, fontSize = 11.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MinecraftEmerald,
-                                        selectedLabelColor = MinecraftObsidian,
-                                        containerColor = MinecraftCardSurface,
-                                        labelColor = TextPrimary
+                    // 3. Versão do Minecraft (Dropdown completo)
+                    if (selectedType != ServerType.GEYSER_STANDALONE) {
+                        Column {
+                            Text(
+                                text = "Versão do Minecraft",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            ExposedDropdownMenuBox(
+                                expanded = versionExpanded,
+                                onExpandedChange = { versionExpanded = !versionExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = selectedVersion,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Versão Selecionada") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = versionExpanded) },
+                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = MinecraftEmerald,
+                                        unfocusedBorderColor = MinecraftBorder
                                     )
                                 )
+                                ExposedDropdownMenu(
+                                    expanded = versionExpanded,
+                                    onDismissRequest = { versionExpanded = false },
+                                    modifier = Modifier.background(MinecraftDarkSurface)
+                                ) {
+                                    ServerConfig.AVAILABLE_VERSIONS.forEach { ver ->
+                                        DropdownMenuItem(
+                                            text = { Text(ver, color = TextPrimary) },
+                                            onClick = {
+                                                selectedVersion = ver
+                                                versionExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // 5. Crossplay GeyserMC
+                    // 4. Integração Playit.gg (Túnel & Domínio Real)
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MinecraftCardSurface),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftDiamond.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -227,25 +228,104 @@ fun ServerCreationDialog(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Crossplay GeyserMC (Bedrock + Java)",
-                                        fontSize = 13.sp,
+                                        text = "Túnel Automático Playit.gg",
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = MinecraftLapis
+                                        color = MinecraftDiamond
                                     )
                                     Text(
-                                        text = "Permite celulares, consoles e Win10 no servidor Java.",
+                                        text = "Cria um endereço nominal grátis (ex: joao.gl.joinmc.link) para jogar pela internet sem abrir portas.",
                                         fontSize = 11.sp,
                                         color = TextSecondary
                                     )
                                 }
                                 Switch(
-                                    checked = enableGeyser,
-                                    onCheckedChange = { enableGeyser = it },
+                                    checked = enablePlayit,
+                                    onCheckedChange = { enablePlayit = it },
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = MinecraftObsidian,
-                                        checkedTrackColor = MinecraftLapis
+                                        checkedTrackColor = MinecraftDiamond
                                     )
                                 )
+                            }
+
+                            if (enablePlayit) {
+                                Button(
+                                    onClick = {
+                                        claimLoading = true
+                                        coroutineScope.launch {
+                                            val session = PlayitManager.startClaimSession()
+                                            claimLoading = false
+                                            if (session != null) {
+                                                activeClaimCode = session.code
+                                                activeClaimUrl = session.claimUrl
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
+                                                context.startActivity(intent)
+                                            } else {
+                                                Toast.makeText(context, "Verifique sua conexão com a internet", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftDiamond),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftObsidian)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        if (claimLoading) "Conectando ao Playit.gg..." else "VINCULAR CONTA PLAYIT.GG",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MinecraftObsidian,
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                activeClaimUrl?.let { url ->
+                                    Text(
+                                        text = "Reivindicação iniciada! Se o navegador não abriu, acesse: $url",
+                                        fontSize = 10.sp,
+                                        color = MinecraftGold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 5. Crossplay GeyserMC (se for Java)
+                    if (selectedType.isJava) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MinecraftCardSurface),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Crossplay GeyserMC + Floodgate",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MinecraftLapis
+                                        )
+                                        Text(
+                                            text = "Permite celulares, consoles e Win10 no servidor Java.",
+                                            fontSize = 11.sp,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                    Switch(
+                                        checked = enableGeyser,
+                                        onCheckedChange = { enableGeyser = it },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = MinecraftObsidian,
+                                            checkedTrackColor = MinecraftLapis
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
@@ -283,32 +363,34 @@ fun ServerCreationDialog(
                     }
 
                     // 7. Modo Pirata
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Modo Pirata + Original",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "Permite contas não-oficiais (TLauncher, Pojav, etc.)",
-                                fontSize = 11.sp,
-                                color = TextMuted
+                    if (selectedType.isJava) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Modo Pirata + Original",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Permite contas não-oficiais (TLauncher, Pojav, etc.)",
+                                    fontSize = 11.sp,
+                                    color = TextMuted
+                                )
+                            }
+                            Switch(
+                                checked = !onlineMode,
+                                onCheckedChange = { onlineMode = !it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = MinecraftObsidian,
+                                    checkedTrackColor = MinecraftEmerald
+                                )
                             )
                         }
-                        Switch(
-                            checked = !onlineMode,
-                            onCheckedChange = { onlineMode = !it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MinecraftObsidian,
-                                checkedTrackColor = MinecraftEmerald
-                            )
-                        )
                     }
                 }
 
@@ -320,8 +402,8 @@ fun ServerCreationDialog(
                         val newServer = ServerConfig(
                             id = UUID.randomUUID().toString(),
                             name = name.ifBlank { "Servidor Minecraft" },
-                            customDomain = domainName.ifBlank { "meu-mundo.craft.gg" },
-                            domainType = domainType,
+                            customDomain = customDomain,
+                            enablePlayitTunnel = enablePlayit,
                             serverType = selectedType,
                             version = selectedVersion,
                             allocatedRamMb = ramMb.toInt(),
