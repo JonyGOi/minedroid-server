@@ -32,7 +32,16 @@ class MinecraftServerService : Service() {
             ACTION_START -> {
                 acquireLocks()
                 val serverName = ServerManager.getActiveConfig()?.name ?: "Minecraft"
-                startForeground(NOTIFICATION_ID, buildNotification("Servidor '$serverName' Ativo"))
+                val notification = buildNotification("Servidor '$serverName' Ativo")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        notification,
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                }
             }
             ACTION_STOP -> {
                 releaseLocks()

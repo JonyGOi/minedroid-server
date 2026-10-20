@@ -262,7 +262,7 @@ fun ServerCreationDialog(
                                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
                                                 context.startActivity(intent)
                                             } else {
-                                                Toast.makeText(context, "Verifique sua conexão com a internet", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Não foi possível conectar ao Playit.gg. Verifique sua conexão.", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     },
@@ -278,6 +278,31 @@ fun ServerCreationDialog(
                                         color = MinecraftObsidian,
                                         fontSize = 12.sp
                                     )
+                                }
+
+                                activeClaimCode?.let { code ->
+                                    Button(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                claimLoading = true
+                                                val secret = PlayitManager.exchangeClaim(code)
+                                                claimLoading = false
+                                                if (!secret.isNullOrBlank()) {
+                                                    PlayitManager.saveSecretKey(context, secret)
+                                                    activeClaimCode = null
+                                                    activeClaimUrl = null
+                                                    Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Ainda aguardando autorização no navegador. Clique em 'Accept' no site e tente novamente.", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("CONFIRMAR VINCULAÇÃO NO APP", fontWeight = FontWeight.Bold, color = MinecraftObsidian, fontSize = 12.sp)
+                                    }
                                 }
 
                                 activeClaimUrl?.let { url ->

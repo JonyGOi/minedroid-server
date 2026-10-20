@@ -102,6 +102,11 @@ object ServerInstaller {
                 val pluginsDir = getPluginsDirectory(context, config.id)
                 onProgress("Configurando túnel automático Playit.gg...", 0.90f)
                 PlayitManager.downloadPlayitPlugin(pluginsDir)
+
+                val savedSecret = PlayitManager.getSavedSecretKey(context)
+                if (!savedSecret.isNullOrBlank()) {
+                    PlayitManager.setupPlayitConfig(serverDir, savedSecret)
+                }
             }
 
             onProgress("Tudo pronto para iniciar!", 1.0f)

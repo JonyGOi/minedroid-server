@@ -8,6 +8,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Random
 
 data class PlayitClaimSession(
     val code: String,
@@ -42,25 +43,45 @@ object PlayitManager {
 
     /**
      * Inicia uma sessão de reivindicação / login no Playit.gg
-     * Retorna a URL para o usuário abrir no navegador e confirmar
+     * Usa o protocolo oficial do Playit.gg com código hexadecimal de 8 bytes (16 caracteres)
      */
     suspend fun startClaimSession(): PlayitClaimSession? = withContext(Dispatchers.IO) {
         try {
+            val bytes = ByteArray(8)
+            Random().nextBytes(bytes)
+            val hexCode = bytes.joinToString("") { "%02x".format(it) }
+
             val url = URL("https://api.playit.gg/claim/setup")
             val conn = url.openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
-            conn.setRequestProperty("User-Agent", "MineDroid-App")
+            conn.connectTimeout = 12000
+            conn.readTimeout = 15000
+            conn.setRequestProperty("User-Agent", "playit-minecraft-plugin/0.2.0")
             conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Accept", "application/json")
             conn.doOutput = true
-            conn.outputStream.use { it.write("{}".toByteArray()) }
 
-            if (conn.responseCode in 200..299) {
+            val body = JSONObject().apply {
+                put("code", hexCode)
+                put("agent_type", "self-managed")
+                put("version", "0.2.0")
+            }.toString()
+
+            conn.outputStream.use { it.write(body.toByteArray()) }
+
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
                 val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(jsonStr)
-                val code = json.getString("code")
-                val claimUrl = "https://playit.gg/claim/$code"
-                PlayitClaimSession(code = code, claimUrl = claimUrl)
-            } else null
+                if (json.optString("status") == "success") {
+                    val claimUrl = "https://playit.gg/claim/$hexCode"
+                    return@withContext PlayitClaimSession(code = hexCode, claimUrl = claimUrl)
+                }
+            } else {
+                val errStr = conn.errorStream?.bufferedReader()?.use { it.readText() }
+                System.err.println("Playit claim setup error ($responseCode): $errStr")
+            }
+            null
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -69,30 +90,82 @@ object PlayitManager {
 
     /**
      * Verifica se o usuário já confirmou o login no navegador
-     * Se confirmado, retorna a chave secreta gerada pelo Playit.gg
+     * Se confirmado ("UserAccepted"), troca o código pelo agent secret key
      */
     suspend fun exchangeClaim(code: String): String? = withContext(Dispatchers.IO) {
         try {
-            val url = URL("https://api.playit.gg/claim/exchange")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("User-Agent", "MineDroid-App")
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.doOutput = true
-            val body = JSONObject().put("code", code).toString()
-            conn.outputStream.use { it.write(body.toByteArray()) }
+            // 1. Checa status da sessão via /claim/setup
+            val setupUrl = URL("https://api.playit.gg/claim/setup")
+            val setupConn = setupUrl.openConnection() as HttpURLConnection
+            setupConn.requestMethod = "POST"
+            setupConn.connectTimeout = 12000
+            setupConn.readTimeout = 15000
+            setupConn.setRequestProperty("User-Agent", "playit-minecraft-plugin/0.2.0")
+            setupConn.setRequestProperty("Content-Type", "application/json")
+            setupConn.setRequestProperty("Accept", "application/json")
+            setupConn.doOutput = true
 
-            if (conn.responseCode in 200..299) {
-                val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(jsonStr)
-                if (json.has("secret_key")) {
-                    json.getString("secret_key")
-                } else null
-            } else null
+            val setupBody = JSONObject().apply {
+                put("code", code)
+                put("agent_type", "self-managed")
+                put("version", "0.2.0")
+            }.toString()
+
+            setupConn.outputStream.use { it.write(setupBody.toByteArray()) }
+
+            if (setupConn.responseCode !in 200..299) return@withContext null
+            val setupResStr = setupConn.inputStream.bufferedReader().use { it.readText() }
+            val setupJson = JSONObject(setupResStr)
+
+            val data = setupJson.optString("data", "")
+            if (data != "UserAccepted") {
+                // Usuário ainda não clicou em aceitar no site
+                return@withContext null
+            }
+
+            // 2. Se aceito, faz exchange via /claim/exchange
+            val exchUrl = URL("https://api.playit.gg/claim/exchange")
+            val exchConn = exchUrl.openConnection() as HttpURLConnection
+            exchConn.requestMethod = "POST"
+            exchConn.connectTimeout = 12000
+            exchConn.readTimeout = 15000
+            exchConn.setRequestProperty("User-Agent", "playit-minecraft-plugin/0.2.0")
+            exchConn.setRequestProperty("Content-Type", "application/json")
+            exchConn.setRequestProperty("Accept", "application/json")
+            exchConn.doOutput = true
+
+            val exchBody = JSONObject().put("code", code).toString()
+            exchConn.outputStream.use { it.write(exchBody.toByteArray()) }
+
+            if (exchConn.responseCode in 200..299) {
+                val exchResStr = exchConn.inputStream.bufferedReader().use { it.readText() }
+                val exchJson = JSONObject(exchResStr)
+                if (exchJson.optString("status") == "success") {
+                    val dataObj = exchJson.optJSONObject("data")
+                    if (dataObj != null && dataObj.has("secret_key")) {
+                        return@withContext dataObj.getString("secret_key")
+                    }
+                    if (exchJson.has("secret_key")) {
+                        return@withContext exchJson.getString("secret_key")
+                    }
+                }
+            }
+            null
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
+    }
+
+    /**
+     * Escreve a chave secreta no arquivo de configuração do plugin Playit
+     * para que o servidor inicie já autenticado com o Playit.gg
+     */
+    fun setupPlayitConfig(serverDir: File, secretKey: String) {
+        val playitConfigDir = File(File(serverDir, "plugins"), "playit-minecraft-plugin")
+        if (!playitConfigDir.exists()) playitConfigDir.mkdirs()
+        val configFile = File(playitConfigDir, "config.yml")
+        configFile.writeText("agent-secret: \"$secretKey\"\n")
     }
 
     /**
@@ -110,7 +183,7 @@ object PlayitManager {
             conn.instanceFollowRedirects = true
             conn.connectTimeout = 15000
             conn.readTimeout = 30000
-            conn.setRequestProperty("User-Agent", "MineDroid-App")
+            conn.setRequestProperty("User-Agent", "playit-minecraft-plugin/0.2.0")
             conn.connect()
 
             conn.inputStream.use { input ->

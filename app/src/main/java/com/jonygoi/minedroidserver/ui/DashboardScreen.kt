@@ -48,6 +48,8 @@ fun DashboardScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var serverToDelete by remember { mutableStateOf<ServerConfig?>(null) }
+    var playitSessionToConfirm by remember { mutableStateOf<PlayitClaimSession?>(null) }
+    var isExchangingPlayit by remember { mutableStateOf(false) }
 
     val activeConfig = remember(servers, activeServerId) {
         servers.find { it.id == activeServerId } ?: servers.firstOrNull()
@@ -83,6 +85,76 @@ fun DashboardScreen(
             },
             dismissButton = {
                 TextButton(onClick = { serverToDelete = null }) {
+                    Text("Cancelar")
+                }
+            },
+            containerColor = MinecraftDarkSurface,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary
+        )
+    }
+
+    // Playit Confirmation Dialog
+    playitSessionToConfirm?.let { session ->
+        AlertDialog(
+            onDismissRequest = { playitSessionToConfirm = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Vincular Playit.gg")
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Uma página foi aberta no seu navegador para autorizar o MineDroid na sua conta do Playit.gg.",
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "1. No navegador, clique em 'Accept' ou 'Confirmar'\n2. Volte ao app e toque em 'Confirmar Vinculação'",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                    if (isExchangingPlayit) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MinecraftEmerald)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            isExchangingPlayit = true
+                            val secret = PlayitManager.exchangeClaim(session.code)
+                            isExchangingPlayit = false
+                            if (!secret.isNullOrBlank()) {
+                                PlayitManager.saveSecretKey(context, secret)
+                                playitSessionToConfirm = null
+                                Toast.makeText(
+                                    context,
+                                    "Conta Playit.gg vinculada com sucesso! Seus servidores agora terão domínios automáticos gratuitos.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Ainda aguardando autorização no navegador. Clique em 'Accept' no site e tente novamente.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                    enabled = !isExchangingPlayit
+                ) {
+                    Text("Confirmar Vinculação", color = MinecraftObsidian, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playitSessionToConfirm = null }) {
                     Text("Cancelar")
                 }
             },
@@ -363,10 +435,11 @@ fun DashboardScreen(
                                         coroutineScope.launch {
                                             val session = PlayitManager.startClaimSession()
                                             if (session != null) {
+                                                playitSessionToConfirm = session
                                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
                                                 context.startActivity(intent)
                                             } else {
-                                                Toast.makeText(context, "Verifique sua conexão com a internet", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Não foi possível conectar ao Playit.gg. Verifique sua conexão.", Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     },
@@ -422,6 +495,19 @@ fun DashboardScreen(
                                 border = BorderStroke(1.dp, MinecraftBorder)
                             ) {
                                 Icon(Icons.Default.Terminal, contentDescription = "Terminal", modifier = Modifier.size(18.dp))
+                            }
+
+                            // Termux 1-tap Button
+                            OutlinedButton(
+                                onClick = {
+                                    TermuxBridge.launchInTermux(context, s)
+                                },
+                                modifier = Modifier.height(44.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MinecraftDiamond),
+                                border = BorderStroke(1.dp, MinecraftDiamond.copy(alpha = 0.5f))
+                            ) {
+                                Icon(Icons.Default.Terminal, contentDescription = "Termux", modifier = Modifier.size(18.dp), tint = MinecraftDiamond)
                             }
 
                             // Config Button

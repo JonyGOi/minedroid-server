@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -75,6 +76,21 @@ fun ConsoleScreen() {
 
             Row {
                 IconButton(onClick = {
+                    val cfg = ServerManager.getActiveConfig()
+                    if (cfg != null) {
+                        TermuxBridge.launchInTermux(context, cfg)
+                    } else {
+                        Toast.makeText(context, "Nenhum servidor selecionado", Toast.LENGTH_SHORT).show()
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Terminal,
+                        contentDescription = "Executar no Termux",
+                        tint = MinecraftDiamond
+                    )
+                }
+
+                IconButton(onClick = {
                     autoScroll = !autoScroll
                     Toast.makeText(
                         context,
@@ -108,6 +124,54 @@ fun ConsoleScreen() {
                         contentDescription = "Limpar Console",
                         tint = TextMuted
                     )
+                }
+            }
+        }
+
+        // High-Performance Termux Banner
+        val activeCfg = ServerManager.getActiveConfig()
+        if (activeCfg != null && state == ServerState.STOPPED) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                color = MinecraftCardSurface,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MinecraftBorder)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "⚡ Executar com Máximo Processamento",
+                            color = MinecraftDiamond,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Inicie via Termux com Java nativo e 100% da CPU",
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            TermuxBridge.launchInTermux(context, activeCfg)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Terminal, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Termux", color = MinecraftObsidian, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

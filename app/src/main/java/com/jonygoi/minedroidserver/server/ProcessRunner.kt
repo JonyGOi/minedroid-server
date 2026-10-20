@@ -31,6 +31,9 @@ class ProcessRunner(
                 // Locate Java binary
                 val javaBin = findJavaBinary()
 
+                // Generate and update Termux-compatible startup script
+                TermuxBridge.generateStartupScript(context, config)
+
                 val jvmArgs = OptimizationEngine.buildJvmArgs(config)
                 val command = mutableListOf<String>()
 
@@ -41,6 +44,12 @@ class ProcessRunner(
                     command.add(jarFile.absolutePath)
                     command.add("nogui")
                 } else {
+                    if (TermuxBridge.isTermuxInstalled(context)) {
+                        onLog(LogMessage(
+                            text = "[MineDroid] Termux detectado! Toque no icone do Termux no topo do console para rodar com maxima performance de CPU.",
+                            type = LogType.SYSTEM
+                        ))
+                    }
                     // Fallback to proot or shell execution
                     command.add("sh")
                     command.add("-c")
@@ -99,6 +108,12 @@ class ProcessRunner(
 
                 val exitCode = proc.waitFor()
                 onLog(LogMessage("[MineDroid] Processo finalizado com código $exitCode", LogType.SYSTEM))
+                if (exitCode == 127) {
+                    onLog(LogMessage(
+                        "[MineDroid] O binário 'java' requer execução via Termux. Toque no ícone do Termux no topo para iniciar com o Java nativo do Termux!",
+                        LogType.WARN
+                    ))
+                }
                 onStateChange(ServerState.STOPPED)
 
             } catch (e: Exception) {
