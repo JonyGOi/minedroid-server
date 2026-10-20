@@ -239,10 +239,20 @@ object ServerManager {
             )
 
             processRunner?.start(cfg)
+
+            // 3. Inicia o túnel Playit.gg nativo em paralelo se habilitado na configuração
+            if (cfg.enablePlayitTunnel) {
+                PlayitTunnelProcess.start(
+                    context = context,
+                    onLog = { playitMsg -> addLog(playitMsg) },
+                    onDomainFound = { domain -> updateActiveServerDomain(domain) }
+                )
+            }
         }
     }
 
     fun stopServer(context: Context) {
+        PlayitTunnelProcess.stop()
         processRunner?.stop()
         val serviceIntent = Intent(context, MinecraftServerService::class.java).apply {
             action = MinecraftServerService.ACTION_STOP
@@ -251,6 +261,7 @@ object ServerManager {
     }
 
     fun killServer(context: Context) {
+        PlayitTunnelProcess.stop()
         processRunner?.kill()
         _state.value = ServerState.STOPPED
         val serviceIntent = Intent(context, MinecraftServerService::class.java).apply {

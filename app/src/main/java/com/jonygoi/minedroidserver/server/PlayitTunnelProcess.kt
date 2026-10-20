@@ -1,0 +1,138 @@
+package com.jonygoi.minedroidserver.server
+
+import android.content.Context
+import kotlinx.coroutines.*
+import java.io.BufferedReader
+import java.io.File
+import java.io.InputStreamReader
+
+object PlayitTunnelProcess {
+    private var process: Process? = null
+    private var processScope: CoroutineScope? = null
+
+    fun isRunning(): Boolean = process?.isAlive == true
+
+    fun start(
+        context: Context,
+        onLog: (LogMessage) -> Unit,
+        onDomainFound: (String) -> Unit
+    ) {
+        if (isRunning()) return
+
+        val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
+        if (!playitBin.exists() || playitBin.length() == 0L) {
+            onLog(LogMessage("[Playit.gg] Binário nativo libplayit.so não encontrado no app.", LogType.WARN))
+            return
+        }
+
+        try {
+            playitBin.setExecutable(true, false)
+        } catch (_: Exception) {}
+
+        val playitDir = File(context.filesDir, "playit").apply { mkdirs() }
+        val playitToml = File(playitDir, "playit.toml")
+
+        // Se o usuário já tiver uma chave salva nas preferências, escreve no playit.toml
+        val savedSecret = PlayitManager.getSavedSecretKey(context)
+        if (!savedSecret.isNullOrBlank()) {
+            if (!playitToml.exists() || !playitToml.readText().contains(savedSecret)) {
+                try {
+                    playitToml.writeText("secret = \"$savedSecret\"\n")
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        processScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        processScope?.launch {
+            try {
+                onLog(LogMessage("[Playit.gg] Iniciando túnel nativo integrado via libplayit...", LogType.SYSTEM))
+
+                val cmd = mutableListOf<String>()
+                cmd.add(playitBin.absolutePath)
+                cmd.add("--secret-path")
+                cmd.add(playitToml.absolutePath)
+                cmd.add("--stdout")
+                cmd.add("start")
+
+                val pb = ProcessBuilder(cmd)
+                pb.directory(playitDir)
+                pb.redirectErrorStream(true)
+
+                val env = pb.environment()
+                env["HOME"] = playitDir.absolutePath
+                val tmpDir = File(context.filesDir, "tmp").apply { mkdirs() }
+                env["TMPDIR"] = tmpDir.absolutePath
+
+                val proc = pb.start()
+                process = proc
+
+                val reader = BufferedReader(InputStreamReader(proc.inputStream))
+                var line: String?
+
+                while (reader.readLine().also { line = it } != null) {
+                    val rawMsg = line ?: continue
+                    val cleanMsg = stripAnsi(rawMsg)
+
+                    // 1. Detectar link de reivindicação / login automático (caso ainda não autenticado)
+                    val claimMatch = Regex("""https://playit\.gg/claim/([a-zA-Z0-9]+)""").find(cleanMsg)
+                    if (claimMatch != null) {
+                        onLog(LogMessage("[Playit.gg] 🔗 Autorize seu servidor no navegador: ${claimMatch.value}", LogType.WARN))
+                    }
+
+                    // 2. Detectar endereço público nominal (xyz.ply.gg / joinmc.link / etc.)
+                    val domain = PlayitManager.parsePlayitDomainFromLog(cleanMsg)
+                    if (domain != null) {
+                        onLog(LogMessage("[Playit.gg] ✅ Túnel nominal ativo: $domain", LogType.SYSTEM))
+                        onDomainFound(domain)
+
+                        // Se o playit salvou uma chave nova no playit.toml, sincroniza com as preferências do app
+                        try {
+                            if (playitToml.exists()) {
+                                val content = playitToml.readText()
+                                val secretMatch = Regex("""secret\s*=\s*\"([^\"]+)\"""").find(content)
+                                if (secretMatch != null) {
+                                    val secret = secretMatch.groupValues[1]
+                                    PlayitManager.saveSecretKey(context, secret)
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    // 3. Filtrar mensagens relevantes de túnel para o console do servidor
+                    if (cleanMsg.contains("tunnel running", ignoreCase = true) ||
+                        cleanMsg.contains("tunnels registered", ignoreCase = true) ||
+                        cleanMsg.contains("connected to", ignoreCase = true) ||
+                        cleanMsg.contains("error", ignoreCase = true)) {
+                        onLog(LogMessage("[Playit.gg] $cleanMsg", LogType.INFO))
+                    }
+                }
+
+                val exitCode = proc.waitFor()
+                onLog(LogMessage("[Playit.gg] Processo de túnel finalizado com código $exitCode", LogType.SYSTEM))
+            } catch (e: Exception) {
+                onLog(LogMessage("[Playit.gg] Erro ao iniciar processo de túnel: ${e.message}", LogType.ERROR))
+            } finally {
+                cleanup()
+            }
+        }
+    }
+
+    fun stop() {
+        try {
+            process?.destroy()
+        } catch (_: Exception) {}
+        cleanup()
+    }
+
+    private fun cleanup() {
+        process = null
+        processScope?.cancel()
+        processScope = null
+    }
+
+    private fun stripAnsi(text: String): String {
+        return text.replace(Regex("\u001B\\[[;\\d]*m"), "")
+    }
+}

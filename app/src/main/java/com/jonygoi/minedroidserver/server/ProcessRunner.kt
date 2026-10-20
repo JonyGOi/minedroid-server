@@ -192,7 +192,10 @@ class ProcessRunner(
         val type = when {
             cleanMsg.contains("ERROR", ignoreCase = true) || cleanMsg.contains("Exception") -> LogType.ERROR
             cleanMsg.contains("WARN", ignoreCase = true) -> LogType.WARN
-            cleanMsg.contains("Done (", ignoreCase = true) -> {
+            cleanMsg.contains("Done (", ignoreCase = true) ||
+            cleanMsg.contains("Started Geyser on", ignoreCase = true) ||
+            cleanMsg.contains("Started Bedrock server", ignoreCase = true) ||
+            cleanMsg.contains("Server started on", ignoreCase = true) -> {
                 onStateChange(ServerState.RUNNING)
                 LogType.SYSTEM
             }
@@ -256,6 +259,7 @@ class ProcessRunner(
     }
 
     private fun cleanup() {
+        PlayitTunnelProcess.stop()
         try { writer?.close() } catch (_: Exception) {}
         writer = null
         process = null

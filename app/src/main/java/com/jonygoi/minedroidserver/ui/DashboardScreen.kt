@@ -98,11 +98,9 @@ fun DashboardScreen(
 
     // Playit Confirmation Dialog with real-time polling
     playitSessionToConfirm?.let { session ->
-        LaunchedEffect(session.code) {
+        DisposableEffect(session.code) {
             playitLiveStatus = "Agente registrado! Aguardando autorização no navegador..."
-            while (isActive) {
-                delay(1500)
-                val status = PlayitManager.checkClaimStatus(session.code)
+            PlayitManager.startBackgroundClaimPoller(session.code, context) { status, secret ->
                 when (status) {
                     PlayitClaimStatus.WAITING_FOR_BROWSER -> {
                         playitLiveStatus = "Aguardando página abrir no navegador..."
@@ -112,9 +110,6 @@ fun DashboardScreen(
                     }
                     PlayitClaimStatus.ACCEPTED -> {
                         playitLiveStatus = "Autorizado com sucesso! Salvando credenciais..."
-                        isExchangingPlayit = true
-                        val secret = PlayitManager.exchangeClaim(session.code)
-                        isExchangingPlayit = false
                         if (!secret.isNullOrBlank()) {
                             PlayitManager.saveSecretKey(context, secret)
                             playitSessionToConfirm = null
@@ -123,16 +118,17 @@ fun DashboardScreen(
                                 "Conta Playit.gg vinculada com sucesso! Seus servidores agora terão domínios nominais gratuitos.",
                                 Toast.LENGTH_LONG
                             ).show()
-                            break
                         }
                     }
                     PlayitClaimStatus.REJECTED -> {
                         Toast.makeText(context, "Vinculação cancelada no navegador.", Toast.LENGTH_SHORT).show()
                         playitSessionToConfirm = null
-                        break
                     }
                     PlayitClaimStatus.ERROR -> {}
                 }
+            }
+            onDispose {
+                PlayitManager.stopBackgroundClaimPoller()
             }
         }
 
@@ -227,7 +223,32 @@ fun DashboardScreen(
                     }
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            isExchangingPlayit = true
+                            val secret = PlayitManager.exchangeClaim(session.code)
+                            isExchangingPlayit = false
+                            if (!secret.isNullOrBlank()) {
+                                PlayitManager.saveSecretKey(context, secret)
+                                playitSessionToConfirm = null
+                                Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "Ainda aguardando autorização no site. Clique em 'Add Agent' na página.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (isExchangingPlayit) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MinecraftObsidian, strokeWidth = 2.dp)
+                    } else {
+                        Text("JÁ AUTORIZEI NO SITE", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            },
             dismissButton = {
                 TextButton(onClick = { playitSessionToConfirm = null }) {
                     Text("Fechar")

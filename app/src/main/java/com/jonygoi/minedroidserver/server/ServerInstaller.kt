@@ -76,8 +76,8 @@ object ServerInstaller {
                 }
             }
 
-            // 4. Download GeyserMC & Floodgate if crossplay is enabled
-            if (config.enableGeyser && config.serverType.isJava) {
+            // 4. Download GeyserMC & Floodgate if crossplay is enabled (Apenas para Paper / Purpur com suporte a Spigot)
+            if (config.enableGeyser && (config.serverType == ServerType.PAPER || config.serverType == ServerType.PURPUR)) {
                 val pluginsDir = getPluginsDirectory(context, config.id)
                 val geyserJar = File(pluginsDir, "Geyser-Spigot.jar")
 
@@ -101,8 +101,8 @@ object ServerInstaller {
                 }
             }
 
-            // 5. Download Playit.gg Plugin if Playit tunnel is enabled
-            if (config.enablePlayitTunnel && config.serverType.isJava) {
+            // 5. Download Playit.gg Plugin se habilitado (Opcional como backup para Paper / Purpur; Vanilla e Geyser usam libplayit nativo)
+            if (config.enablePlayitTunnel && (config.serverType == ServerType.PAPER || config.serverType == ServerType.PURPUR)) {
                 val pluginsDir = getPluginsDirectory(context, config.id)
                 onProgress("Configurando túnel automático Playit.gg...", 0.90f)
                 PlayitManager.downloadPlayitPlugin(pluginsDir)

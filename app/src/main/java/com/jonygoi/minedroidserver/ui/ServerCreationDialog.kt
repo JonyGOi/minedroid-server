@@ -305,11 +305,9 @@ fun ServerCreationDialog(
                                 }
 
                                 activeClaimCode?.let { code ->
-                                    LaunchedEffect(code) {
+                                    DisposableEffect(code) {
                                         claimLiveStatus = "Agente registrado! Aguardando autorização no navegador..."
-                                        while (isActive) {
-                                            delay(1500)
-                                            val status = PlayitManager.checkClaimStatus(code)
+                                        PlayitManager.startBackgroundClaimPoller(code, context) { status, secret ->
                                             when (status) {
                                                 PlayitClaimStatus.WAITING_FOR_BROWSER -> {
                                                     claimLiveStatus = "Aguardando página abrir no navegador..."
@@ -319,23 +317,20 @@ fun ServerCreationDialog(
                                                 }
                                                 PlayitClaimStatus.ACCEPTED -> {
                                                     claimLiveStatus = "Autorizado com sucesso! Salvando credenciais..."
-                                                    val secret = PlayitManager.exchangeClaim(code)
                                                     if (!secret.isNullOrBlank()) {
-                                                        PlayitManager.saveSecretKey(context, secret)
                                                         manualSecretKey = secret
                                                         activeClaimCode = null
                                                         activeClaimUrl = null
-                                                        Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_LONG).show()
-                                                        break
                                                     }
                                                 }
                                                 PlayitClaimStatus.REJECTED -> {
-                                                    Toast.makeText(context, "Autorização cancelada no site.", Toast.LENGTH_SHORT).show()
                                                     activeClaimCode = null
-                                                    break
                                                 }
                                                 PlayitClaimStatus.ERROR -> {}
                                             }
+                                        }
+                                        onDispose {
+                                            PlayitManager.stopBackgroundClaimPoller()
                                         }
                                     }
 
@@ -344,17 +339,51 @@ fun ServerCreationDialog(
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftDiamond.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                                     ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MinecraftDiamond, strokeWidth = 2.dp)
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(claimLiveStatus, color = MinecraftDiamond, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                             }
                                             Text(
-                                                text = "O app está mantendo conexão aberta com o site. Quando você clicar em 'Add Agent' na página, ele autorizará sozinho!",
+                                                text = "O app está mantendo conexão constante com o site. Quando você clicar em 'Add Agent' na página, ele autorizará sozinho!",
                                                 fontSize = 10.sp,
                                                 color = TextSecondary
                                             )
+                                            Button(
+                                                onClick = {
+                                                    coroutineScope.launch {
+                                                        claimLoading = true
+                                                        val secret = PlayitManager.exchangeClaim(code)
+                                                        claimLoading = false
+                                                        if (!secret.isNullOrBlank()) {
+                                                            PlayitManager.saveSecretKey(context, secret)
+                                                            manualSecretKey = secret
+                                                            activeClaimCode = null
+                                                            activeClaimUrl = null
+                                                            Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_LONG).show()
+                                                        } else {
+                                                            Toast.makeText(context, "Ainda não confirmado no navegador. Clique em 'Add Agent' na página primeiro.", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text("JÁ CLIQUEI EM 'ADD AGENT' (CONFIRMAR)", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                            }
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val url = activeClaimUrl ?: "https://playit.gg/claim/$code"
+                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                                    context.startActivity(intent)
+                                                },
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Text("Reabrir Página no Navegador", fontSize = 10.sp, color = MinecraftDiamond)
+                                            }
                                         }
                                     }
                                 }
@@ -394,8 +423,8 @@ fun ServerCreationDialog(
                         }
                     }
 
-                    // 5. Crossplay GeyserMC (se for Java)
-                    if (selectedType.isJava) {
+                    // 5. Crossplay GeyserMC (Apenas para motores com suporte a Spigot: Paper e Purpur)
+                    if (selectedType == ServerType.PAPER || selectedType == ServerType.PURPUR) {
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MinecraftCardSurface),
                             shape = RoundedCornerShape(10.dp),
@@ -429,6 +458,46 @@ fun ServerCreationDialog(
                                         )
                                     )
                                 }
+                            }
+                        }
+                    } else if (selectedType == ServerType.VANILLA) {
+                        Surface(
+                            color = MinecraftCardSurface.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftBorder, RoundedCornerShape(8.dp))
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "Vanilla Oficial da Mojang",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Versão oficial pura da Mojang. Não possui sistema de plugins Spigot.",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    } else if (selectedType == ServerType.GEYSER_STANDALONE) {
+                        Surface(
+                            color = MinecraftCardSurface.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftDiamond.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "GeyserMC Standalone Nativo",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MinecraftDiamond
+                                )
+                                Text(
+                                    text = "Proxy dedicado que conecta jogadores Bedrock (celular/console) com baixíssimo consumo de memória.",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
                             }
                         }
                     }
