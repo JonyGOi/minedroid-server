@@ -172,8 +172,34 @@ object ServerInstaller {
         propsFile.writeText(content)
     }
 
-    private fun setupGeyserConfig(serverDir: File, config: ServerConfig) {
+    fun ensureFloodgateKey(serverDir: File, config: ServerConfig) {
         try {
+            val keyBytes = ByteArray(32)
+            java.security.SecureRandom().nextBytes(keyBytes)
+            val base64Key = java.util.Base64.getEncoder().encodeToString(keyBytes) + "\n"
+
+            val targetDirs = mutableListOf<File>()
+            targetDirs.add(serverDir)
+            val pluginsDir = File(serverDir, "plugins")
+            targetDirs.add(File(pluginsDir, "Geyser-Spigot"))
+            targetDirs.add(File(pluginsDir, "floodgate"))
+
+            for (dir in targetDirs) {
+                if (!dir.exists()) dir.mkdirs()
+                val keyFile = File(dir, "key.pem")
+                if (!keyFile.exists() || keyFile.length() == 0L) {
+                    keyFile.writeText(base64Key)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun setupGeyserConfig(serverDir: File, config: ServerConfig) {
+        try {
+            ensureFloodgateKey(serverDir, config)
+
             val geyserDir = if (config.serverType == ServerType.GEYSER_STANDALONE) {
                 serverDir
             } else {
@@ -183,6 +209,7 @@ object ServerInstaller {
 
             val configFile = File(geyserDir, "config.yml")
             val authType = when {
+                config.serverType == ServerType.GEYSER_STANDALONE -> "offline"
                 config.enableFloodgate -> "floodgate"
                 !config.onlineMode -> "offline"
                 else -> "online"
@@ -210,6 +237,7 @@ object ServerInstaller {
                     appendLine("  port: ${config.serverPort}")
                     appendLine("  auth-type: $authType")
                     appendLine("  use-proxy-protocol: false")
+                    appendLine("floodgate-key-file: key.pem")
                     appendLine("passthrough-motd: true")
                     appendLine("passthrough-player-counts: true")
                     appendLine("passthrough-protocol-name: true")

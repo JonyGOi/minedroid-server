@@ -407,8 +407,19 @@ object PlayitManager {
         val savedSecret = getSavedSecretKey(context)
         if (savedSecret.isNullOrBlank()) return@withContext false
 
-        try {
-            val cmd = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType)
+        val portType = if (tunnelType.contains("bedrock", ignoreCase = true)) "udp" else "tcp"
+
+        // 1. Tenta criar passando TUNNEL_TYPE PORT_TYPE PORT_COUNT
+        val cmdFull = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType, portType, "1")
+        if (executePlayitCommand(cmdFull, playitDir, context)) return@withContext true
+
+        // 2. Fallback passando apenas TUNNEL_TYPE
+        val cmdSimple = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType)
+        executePlayitCommand(cmdSimple, playitDir, context)
+    }
+
+    private fun executePlayitCommand(cmd: List<String>, playitDir: File, context: Context): Boolean {
+        return try {
             val pb = ProcessBuilder(cmd)
             pb.directory(playitDir)
             pb.redirectErrorStream(true)
@@ -421,16 +432,20 @@ object PlayitManager {
 
             val proc = pb.start()
             val reader = BufferedReader(InputStreamReader(proc.inputStream))
-            while (reader.readLine() != null) {}
-            val completed = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                // Esvazia buffer do processo
+            }
+            val completed = proc.waitFor(12, java.util.concurrent.TimeUnit.SECONDS)
             if (!completed) {
                 proc.destroy()
-                return@withContext false
+                false
+            } else {
+                proc.exitValue() == 0
             }
-            return@withContext proc.exitValue() == 0
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext false
+            false
         }
     }
 
@@ -446,11 +461,28 @@ object PlayitManager {
         if (savedSecret.isNullOrBlank()) return@withContext
 
         try {
+            var tunnelsCreated = false
             if (needJava) {
-                createTunnel(context, "minecraft-java")
+                val created = createTunnel(context, "minecraft-java")
+                if (created) tunnelsCreated = true
             }
             if (needBedrock) {
-                createTunnel(context, "minecraft-bedrock")
+                val created = createTunnel(context, "minecraft-bedrock")
+                if (created) tunnelsCreated = true
+            }
+
+            // Se novos túneis foram criados e o processo do Playit já estava rodando,
+            // reinicia o processo para carregar os novos túneis imediatamente
+            if (tunnelsCreated && PlayitTunnelProcess.isRunning()) {
+                withContext(Dispatchers.Main) {
+                    PlayitTunnelProcess.stop()
+                    PlayitTunnelProcess.start(
+                        context = context,
+                        onLog = { msg -> ServerManager.addLog(msg) },
+                        onDomainFound = { d -> ServerManager.updateActiveServerDomain(d) },
+                        onBedrockDomainFound = { bd -> ServerManager.updateActiveServerBedrockDomain(bd) }
+                    )
+                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
