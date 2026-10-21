@@ -42,7 +42,17 @@ data class ServerConfig(
     val difficulty: String = "normal",
     val gamemode: String = "survival",
     val viewDistance: Int = 6,
-    val simulationDistance: Int = 4
+    val simulationDistance: Int = 4,
+    val levelName: String = "world",
+    val levelSeed: String = "",
+    val allowFlight: Boolean = false,
+    val hardcore: Boolean = false,
+    val spawnAnimals: Boolean = true,
+    val spawnMonsters: Boolean = true,
+    val spawnNpcs: Boolean = true,
+    val whiteList: Boolean = false,
+    val enableCommandBlock: Boolean = true,
+    val spawnProtection: Int = 0
 ) {
     val friendlyJavaAddress: String
         get() = when {

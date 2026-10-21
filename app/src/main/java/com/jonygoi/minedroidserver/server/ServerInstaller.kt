@@ -171,6 +171,15 @@ object ServerInstaller {
 
                 // Configuração das portas, motd e autenticação floodgate/offline
                 setupGeyserConfig(serverDir, config)
+            } else {
+                // Modo Puro: Remove plugins de crossplay para que o Paper / Purpur rode 100% puro
+                try {
+                    val pluginsDir = getPluginsDirectory(context, config.id)
+                    listOf("Geyser-Spigot.jar", "floodgate-spigot.jar", "ViaVersion.jar").forEach { name ->
+                        val f = File(pluginsDir, name)
+                        if (f.exists()) f.delete()
+                    }
+                } catch (_: Exception) {}
             }
 
             // 5. Criação automática de túneis Playit.gg nativos (sem plugin no Minecraft)
@@ -217,13 +226,22 @@ object ServerInstaller {
             appendLine("pvp=${config.pvp}")
             appendLine("difficulty=${config.difficulty}")
             appendLine("gamemode=${config.gamemode}")
+            appendLine("level-name=${config.levelName}")
+            if (config.levelSeed.isNotBlank()) {
+                appendLine("level-seed=${config.levelSeed}")
+            }
+            appendLine("allow-flight=${config.allowFlight}")
+            appendLine("hardcore=${config.hardcore}")
+            appendLine("spawn-animals=${config.spawnAnimals}")
+            appendLine("spawn-monsters=${config.spawnMonsters}")
+            appendLine("spawn-npcs=${config.spawnNpcs}")
+            appendLine("white-list=${config.whiteList}")
+            appendLine("enable-command-block=${config.enableCommandBlock}")
+            appendLine("spawn-protection=${config.spawnProtection}")
             appendLine("view-distance=${config.viewDistance}")
             appendLine("simulation-distance=${config.simulationDistance}")
-            appendLine("spawn-protection=0")
-            appendLine("enable-command-block=true")
             appendLine("sync-chunk-writes=false")
             appendLine("network-compression-threshold=256")
-            appendLine("white-list=false")
         }.toString()
         propsFile.writeText(content)
     }

@@ -53,7 +53,17 @@ object ServerStorage {
                         difficulty = obj.optString("difficulty", "normal"),
                         gamemode = obj.optString("gamemode", "survival"),
                         viewDistance = obj.optInt("viewDistance", 6),
-                        simulationDistance = obj.optInt("simulationDistance", 4)
+                        simulationDistance = obj.optInt("simulationDistance", 4),
+                        levelName = obj.optString("levelName", "world"),
+                        levelSeed = obj.optString("levelSeed", ""),
+                        allowFlight = obj.optBoolean("allowFlight", false),
+                        hardcore = obj.optBoolean("hardcore", false),
+                        spawnAnimals = obj.optBoolean("spawnAnimals", true),
+                        spawnMonsters = obj.optBoolean("spawnMonsters", true),
+                        spawnNpcs = obj.optBoolean("spawnNpcs", true),
+                        whiteList = obj.optBoolean("whiteList", false),
+                        enableCommandBlock = obj.optBoolean("enableCommandBlock", true),
+                        spawnProtection = obj.optInt("spawnProtection", 0)
                     )
                 )
             }
@@ -95,6 +105,16 @@ object ServerStorage {
                     put("gamemode", s.gamemode)
                     put("viewDistance", s.viewDistance)
                     put("simulationDistance", s.simulationDistance)
+                    put("levelName", s.levelName)
+                    put("levelSeed", s.levelSeed)
+                    put("allowFlight", s.allowFlight)
+                    put("hardcore", s.hardcore)
+                    put("spawnAnimals", s.spawnAnimals)
+                    put("spawnMonsters", s.spawnMonsters)
+                    put("spawnNpcs", s.spawnNpcs)
+                    put("whiteList", s.whiteList)
+                    put("enableCommandBlock", s.enableCommandBlock)
+                    put("spawnProtection", s.spawnProtection)
                 }
                 jsonArray.put(obj)
             }

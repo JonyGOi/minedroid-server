@@ -143,20 +143,37 @@ fun ServerCreationDialog(
                         )
 
                         listOf(
-                            ServerType.PAPER to "PaperMC (Recomendado com Mundo)",
-                            ServerType.PURPUR to "Purpur (Ultra Otimizado)",
-                            ServerType.VANILLA to "Vanilla (Oficial Mojang)",
-                            ServerType.FABRIC to "Fabric (Modded)",
-                            ServerType.GEYSER_STANDALONE to "GeyserMC Proxy (Apenas Ponte)"
-                        ).forEach { (type, label) ->
-                            val isSel = selectedType == type
+                            Triple(ServerType.PAPER, false, "PaperMC Puro (Apenas Java Edition)"),
+                            Triple(ServerType.PAPER, true, "PaperMC + Crossplay (Java + Bedrock Mobile)"),
+                            Triple(ServerType.PURPUR, true, "Purpur (Ultra Otimizado + Crossplay)"),
+                            Triple(ServerType.VANILLA, false, "Vanilla (Oficial Mojang Puro)"),
+                            Triple(ServerType.FABRIC, false, "Fabric (Java Modded)"),
+                            Triple(ServerType.GEYSER_STANDALONE, true, "GeyserMC Proxy (Apenas Ponte)")
+                        ).forEach { (type, crossplay, label) ->
+                            val isSel = if (type == ServerType.PAPER) {
+                                selectedType == ServerType.PAPER && (if (crossplay) enableGeyser else !enableGeyser)
+                            } else {
+                                selectedType == type
+                            }
                             Surface(
                                 color = if (isSel) MinecraftCardSurface else MinecraftDarkSurface,
                                 shape = RoundedCornerShape(8.dp),
                                 border = BorderStroke(1.dp, if (isSel) MinecraftEmerald else MinecraftBorder),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedType = type }
+                                    .clickable {
+                                        selectedType = type
+                                        if (type == ServerType.PAPER) {
+                                            enableGeyser = crossplay
+                                            enableFloodgate = crossplay
+                                        } else if (type == ServerType.PURPUR) {
+                                            enableGeyser = true
+                                            enableFloodgate = true
+                                        } else {
+                                            enableGeyser = false
+                                            enableFloodgate = false
+                                        }
+                                    }
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -164,7 +181,13 @@ fun ServerCreationDialog(
                                 ) {
                                     RadioButton(
                                         selected = isSel,
-                                        onClick = { selectedType = type },
+                                        onClick = {
+                                            selectedType = type
+                                            if (type == ServerType.PAPER) {
+                                                enableGeyser = crossplay
+                                                enableFloodgate = crossplay
+                                            }
+                                        },
                                         colors = RadioButtonDefaults.colors(selectedColor = MinecraftEmerald),
                                         modifier = Modifier.size(20.dp)
                                     )

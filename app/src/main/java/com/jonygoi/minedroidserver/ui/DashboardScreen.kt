@@ -35,7 +35,8 @@ import kotlinx.coroutines.*
 @Composable
 fun DashboardScreen(
     onNavigateToConsole: () -> Unit,
-    onNavigateToConfig: () -> Unit
+    onNavigateToConfig: () -> Unit,
+    onNavigateToFiles: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -671,87 +672,179 @@ fun DashboardScreen(
                         }
 
                         // 4. Ações Principais do Servidor
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            // Botão Primário: Iniciar / Parar
+                            // Botão Primário: Iniciar / Parar (FULL WIDTH, 52dp)
                             if (isRunning) {
                                 Button(
                                     onClick = { ServerManager.stopServer(context) },
-                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = MinecraftRedstone),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(Icons.Default.Stop, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("PARAR SERVIDOR", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                    Icon(
+                                        imageVector = Icons.Default.Stop,
+                                        contentDescription = null,
+                                        tint = TextPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "PARAR SERVIDOR",
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary,
+                                        fontSize = 14.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
                                 }
                             } else if (isStarting) {
                                 Button(
                                     onClick = {},
                                     enabled = false,
-                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp),
                                     colors = ButtonDefaults.buttonColors(disabledContainerColor = MinecraftGold.copy(alpha = 0.5f)),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MinecraftObsidian, strokeWidth = 2.dp)
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = MinecraftObsidian,
+                                        strokeWidth = 2.dp
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("INICIANDO...", fontWeight = FontWeight.Bold, color = MinecraftObsidian, fontSize = 13.sp)
+                                    Text(
+                                        text = "INICIANDO SERVIDOR...",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MinecraftObsidian,
+                                        fontSize = 14.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
                                 }
                             } else {
                                 Button(
                                     onClick = { ServerManager.startServer(context, s.id) },
-                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(52.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("INICIAR SERVIDOR", fontWeight = FontWeight.Bold, color = MinecraftObsidian, fontSize = 13.sp)
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = MinecraftObsidian,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "INICIAR SERVIDOR",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MinecraftObsidian,
+                                        fontSize = 14.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
                                 }
                             }
 
-                            // Botão Console / Terminal
-                            OutlinedButton(
-                                onClick = {
-                                    ServerManager.selectServer(s.id)
-                                    onNavigateToConsole()
-                                },
-                                modifier = Modifier.height(48.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                                border = BorderStroke(1.dp, MinecraftBorder)
+                            // Barra de Ferramentas Rápidas (Terminal, Arquivos, Configurar, Excluir)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Terminal, contentDescription = "Terminal", modifier = Modifier.size(20.dp))
-                            }
-
-                            // Botão Configurações
-                            OutlinedButton(
-                                onClick = {
-                                    ServerManager.selectServer(s.id)
-                                    onNavigateToConfig()
-                                },
-                                modifier = Modifier.height(48.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                                border = BorderStroke(1.dp, MinecraftBorder)
-                            ) {
-                                Icon(Icons.Default.Settings, contentDescription = "Configurar", modifier = Modifier.size(20.dp))
-                            }
-
-                            // Botão Excluir (apenas quando parado)
-                            if (!isServerRunning) {
-                                IconButton(
-                                    onClick = { serverToDelete = s },
-                                    modifier = Modifier.size(48.dp)
+                                // Botão Terminal
+                                OutlinedButton(
+                                    onClick = {
+                                        ServerManager.selectServer(s.id)
+                                        onNavigateToConsole()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                    border = BorderStroke(1.dp, MinecraftBorder),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
                                 ) {
                                     Icon(
-                                        Icons.Default.DeleteOutline,
-                                        contentDescription = "Excluir Servidor",
-                                        tint = TextMuted
+                                        imageVector = Icons.Default.Terminal,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MinecraftEmerald
                                     )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Terminal", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                }
+
+                                // Botão Arquivos / Explorador de Diretórios
+                                OutlinedButton(
+                                    onClick = {
+                                        ServerManager.selectServer(s.id)
+                                        onNavigateToFiles()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                    border = BorderStroke(1.dp, MinecraftBorder),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Folder,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MinecraftLapis
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Arquivos", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                }
+
+                                // Botão Configurar
+                                OutlinedButton(
+                                    onClick = {
+                                        ServerManager.selectServer(s.id)
+                                        onNavigateToConfig()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                    border = BorderStroke(1.dp, MinecraftBorder),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = TextSecondary
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Config", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                }
+
+                                // Botão Excluir (apenas quando parado)
+                                if (!isServerRunning) {
+                                    IconButton(
+                                        onClick = { serverToDelete = s },
+                                        modifier = Modifier.size(44.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.DeleteOutline,
+                                            contentDescription = "Excluir Servidor",
+                                            tint = TextMuted,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }

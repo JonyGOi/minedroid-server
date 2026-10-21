@@ -24,6 +24,7 @@ import com.jonygoi.minedroidserver.ui.*
 enum class AppTab(val title: String, val icon: ImageVector) {
     DASHBOARD("Servidores", Icons.Default.Dns),
     CONSOLE("Terminal", Icons.Default.Terminal),
+    FILES("Arquivos", Icons.Default.Folder),
     CONFIG("Configurar", Icons.Default.Settings),
     OPTIMIZATION("Otimizar", Icons.Default.Speed)
 }
@@ -103,9 +104,11 @@ fun MainApp() {
             when (selectedTab) {
                 AppTab.DASHBOARD -> DashboardScreen(
                     onNavigateToConsole = { selectedTab = AppTab.CONSOLE },
-                    onNavigateToConfig = { selectedTab = AppTab.CONFIG }
+                    onNavigateToConfig = { selectedTab = AppTab.CONFIG },
+                    onNavigateToFiles = { selectedTab = AppTab.FILES }
                 )
                 AppTab.CONSOLE -> ConsoleScreen()
+                AppTab.FILES -> FileManagerScreen()
                 AppTab.CONFIG -> ServerConfigScreen(
                     onSaved = { selectedTab = AppTab.DASHBOARD }
                 )
