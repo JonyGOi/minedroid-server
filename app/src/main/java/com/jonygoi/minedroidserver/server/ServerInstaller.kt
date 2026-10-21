@@ -173,23 +173,28 @@ object ServerInstaller {
                 setupGeyserConfig(serverDir, config)
             }
 
-            // 5. Download Playit.gg Plugin e criação automática de túneis se habilitado
+            // 5. Criação automática de túneis Playit.gg nativos (sem plugin no Minecraft)
             if (config.enablePlayitTunnel) {
                 onProgress("Configurando túneis automáticos Playit.gg...", 0.90f)
                 val needJava = config.serverType != ServerType.GEYSER_STANDALONE
                 val needBedrock = config.enableGeyser || config.serverType == ServerType.GEYSER_STANDALONE
                 PlayitManager.ensureTunnelsExist(context, needJava = needJava, needBedrock = needBedrock)
-
-                if (config.serverType == ServerType.PAPER || config.serverType == ServerType.PURPUR) {
-                    val pluginsDir = getPluginsDirectory(context, config.id)
-                    PlayitManager.downloadPlayitPlugin(pluginsDir)
-
-                    val savedSecret = PlayitManager.getSavedSecretKey(context)
-                    if (!savedSecret.isNullOrBlank()) {
-                        PlayitManager.setupPlayitConfig(serverDir, savedSecret)
-                    }
-                }
             }
+
+            // Limpeza: remove qualquer resquício do plugin antigo do playit na pasta plugins.
+            // O MineDroid utiliza o motor nativo libplayit.so em segundo plano no app, tornando desnecessário
+            // e redundante o plugin dentro do Minecraft (que causava avisos de 'check logs to claim' no chat do jogo).
+            try {
+                val pluginsDir = getPluginsDirectory(context, config.id)
+                val oldPlugin = File(pluginsDir, "playit-minecraft-plugin.jar")
+                if (oldPlugin.exists()) oldPlugin.delete()
+                val oldPluginSpigot = File(pluginsDir, "playit-spigot.jar")
+                if (oldPluginSpigot.exists()) oldPluginSpigot.delete()
+                val oldPlayitFolder = File(pluginsDir, "playit-gg")
+                if (oldPlayitFolder.exists()) oldPlayitFolder.deleteRecursively()
+                val oldPlayitConfigFolder = File(pluginsDir, "playit-minecraft-plugin")
+                if (oldPlayitConfigFolder.exists()) oldPlayitConfigFolder.deleteRecursively()
+            } catch (_: Exception) {}
 
             onProgress("Tudo pronto para iniciar!", 1.0f)
             true

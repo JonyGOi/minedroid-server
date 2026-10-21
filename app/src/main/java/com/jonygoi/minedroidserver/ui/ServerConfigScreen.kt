@@ -61,7 +61,6 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
     }
 
     var serverName by remember(currentConfig) { mutableStateOf(currentConfig.name) }
-    var domainAddress by remember(currentConfig) { mutableStateOf(currentConfig.customDomain) }
     var selectedType by remember(currentConfig) { mutableStateOf(currentConfig.serverType) }
     var selectedVersion by remember(currentConfig) { mutableStateOf(currentConfig.version) }
     var ramMb by remember(currentConfig) { mutableFloatStateOf(currentConfig.allocatedRamMb.toFloat()) }
@@ -97,7 +96,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             color = TextPrimary
         )
 
-        // Nome e Domínio
+        // Identificação do Servidor
         Card(
             colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
             shape = RoundedCornerShape(14.dp),
@@ -110,7 +109,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Identificação & Endereço Amigável",
+                    text = "Identificação do Servidor",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MinecraftDiamond
@@ -128,18 +127,51 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     )
                 )
 
-                OutlinedTextField(
-                    value = domainAddress,
-                    onValueChange = { domainAddress = it },
-                    label = { Text("Endereço Amigável (Domínio)") },
-                    placeholder = { Text("Ex: meu-mundo.craft.gg ou servidor.local") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MinecraftDiamond,
-                        unfocusedBorderColor = MinecraftBorder
-                    )
-                )
+                // Informações dos endereços Playit (gerados automaticamente pelo túnel)
+                if (currentConfig.enablePlayitTunnel) {
+                    Surface(
+                        color = MinecraftCardSurface,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Endereço Playit.gg (Automático)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MinecraftDiamond
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "O domínio e as portas são gerados e vinculados automaticamente pelo Playit.gg.",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                            if (currentConfig.customDomain.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "☕ Java: ${currentConfig.friendlyJavaAddress}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MinecraftEmerald
+                                )
+                            }
+                            if (currentConfig.bedrockDomain.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "🎮 Bedrock: ${currentConfig.friendlyBedrockAddress}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MinecraftLapis
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -594,7 +626,8 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             onClick = {
                 val updatedConfig = currentConfig.copy(
                     name = serverName.ifBlank { "Servidor Minecraft" },
-                    customDomain = domainAddress,
+                    customDomain = currentConfig.customDomain,
+                    bedrockDomain = currentConfig.bedrockDomain,
                     serverType = selectedType,
                     version = selectedVersion,
                     allocatedRamMb = ramMb.toInt(),
