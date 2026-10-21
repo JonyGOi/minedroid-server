@@ -130,6 +130,8 @@ fun ServerCreationDialog(
                         Spacer(modifier = Modifier.height(6.dp))
                         ServerType.values().forEach { type ->
                             val isSel = selectedType == type
+                            val isRecommended = type == ServerType.PAPER
+                            val isProxyOnly = type == ServerType.GEYSER_STANDALONE
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -139,7 +141,7 @@ fun ServerCreationDialog(
                                     )
                                     .border(
                                         1.dp,
-                                        if (isSel) MinecraftEmerald else MinecraftBorder,
+                                        if (isSel) MinecraftEmerald else if (isRecommended) MinecraftEmerald.copy(alpha = 0.5f) else MinecraftBorder,
                                         RoundedCornerShape(8.dp)
                                     )
                                     .clickable { selectedType = type }
@@ -153,16 +155,37 @@ fun ServerCreationDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Column {
-                                    Text(
-                                        text = type.displayName,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (type == ServerType.GEYSER_STANDALONE) MinecraftDiamond else TextPrimary
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = type.displayName,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = when {
+                                                isRecommended -> MinecraftEmerald
+                                                isProxyOnly -> TextMuted
+                                                else -> TextPrimary
+                                            }
+                                        )
+                                        if (isRecommended) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                color = MinecraftEmerald.copy(alpha = 0.2f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = "RECOMENDADO",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MinecraftEmerald,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                     Text(
                                         text = type.category,
                                         fontSize = 11.sp,
-                                        color = TextSecondary
+                                        color = if (isProxyOnly) MinecraftGold else TextSecondary
                                     )
                                 }
                             }
@@ -497,17 +520,22 @@ fun ServerCreationDialog(
                         Surface(
                             color = MinecraftCardSurface.copy(alpha = 0.5f),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftDiamond.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftGold.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MinecraftGold, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Aviso: Apenas Proxy (NÃO cria mundo)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MinecraftGold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "GeyserMC Standalone Nativo",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MinecraftDiamond
-                                )
-                                Text(
-                                    text = "Proxy dedicado que conecta jogadores Bedrock (celular/console) com baixíssimo consumo de memória.",
+                                    text = "O GeyserMC Standalone NÃO é um jogo de Minecraft e NÃO gera terreno, blocos ou criaturas. Ele serve apenas como 'ponte' para conectar jogadores Bedrock (celular) a outro servidor Java que já esteja rodando em outro local.\n\n👉 Para criar seu mundo completo com suporte a celular (Bedrock) e PC (Java), selecione PaperMC acima!",
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )

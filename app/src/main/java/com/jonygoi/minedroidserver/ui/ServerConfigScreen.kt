@@ -1,6 +1,7 @@
 package com.jonygoi.minedroidserver.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -152,6 +153,8 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
 
         ServerType.values().forEach { type ->
             val isSelected = selectedType == type
+            val isRecommended = type == ServerType.PAPER
+            val isProxyOnly = type == ServerType.GEYSER_STANDALONE
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) MinecraftCardSurface else MinecraftDarkSurface
@@ -161,7 +164,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     .fillMaxWidth()
                     .border(
                         1.dp,
-                        if (isSelected) MinecraftEmerald else MinecraftBorder,
+                        if (isSelected) MinecraftEmerald else if (isRecommended) MinecraftEmerald.copy(alpha = 0.5f) else MinecraftBorder,
                         RoundedCornerShape(12.dp)
                     )
                     .clickable { selectedType = type }
@@ -177,16 +180,37 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Text(
-                            text = type.displayName,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (type == ServerType.GEYSER_STANDALONE) MinecraftDiamond else TextPrimary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = type.displayName,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    isRecommended -> MinecraftEmerald
+                                    isProxyOnly -> TextMuted
+                                    else -> TextPrimary
+                                }
+                            )
+                            if (isRecommended) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = MinecraftEmerald.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "RECOMENDADO",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MinecraftEmerald,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
                         Text(
                             text = type.category,
                             fontSize = 12.sp,
-                            color = TextSecondary
+                            color = if (isProxyOnly) MinecraftGold else TextSecondary
                         )
                     }
                 }
@@ -242,8 +266,52 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             }
         }
 
-        // Section: Crossplay GeyserMC (se for Java)
-        if (selectedType.isJava) {
+        // Section: Crossplay GeyserMC ou Aviso de Proxy
+        if (selectedType == ServerType.GEYSER_STANDALONE) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, MinecraftGold.copy(alpha = 0.6f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MinecraftGold, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "GeyserMC Standalone (Sem Mundo Próprio)",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MinecraftGold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "O modo Geyser Standalone é apenas um proxy/ponte para conectar celulares a outro servidor Java externo. Ele NÃO gera blocos, mundo nem mobs.\n\nPara ter um servidor completo onde você e seus amigos possam jogar juntos no mesmo mapa gerado pelo app, mude para PaperMC abaixo:",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            selectedType = ServerType.PAPER
+                            enableGeyser = true
+                            enableFloodgate = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Converter para PaperMC (Mundo + Crossplay) ⭐",
+                            fontWeight = FontWeight.Bold,
+                            color = MinecraftObsidian,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        } else if (selectedType == ServerType.PAPER || selectedType == ServerType.PURPUR) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
                 shape = RoundedCornerShape(14.dp),

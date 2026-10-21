@@ -108,14 +108,23 @@ class ProcessRunner(
                 command.add("server.jar")
                 command.add("nogui")
 
+                val engineInfo = "${config.serverType.displayName} ${if (config.serverType != ServerType.GEYSER_STANDALONE) config.version else ""}".trim()
                 onLog(LogMessage(
-                    text = "[MineDroid] Servidor '${config.name}' iniciando com ${config.allocatedRamMb}MB...",
+                    text = "[MineDroid] Servidor '${config.name}' ($engineInfo) iniciando com ${config.allocatedRamMb}MB...",
                     type = LogType.SYSTEM
                 ))
-                onLog(LogMessage(
-                    text = "[MineDroid] Endereço amigável: ${config.friendlyJavaAddress}",
-                    type = LogType.SYSTEM
-                ))
+                if (config.serverType != ServerType.GEYSER_STANDALONE) {
+                    onLog(LogMessage(
+                        text = "[MineDroid] Endereço Java: ${config.friendlyJavaAddress}",
+                        type = LogType.SYSTEM
+                    ))
+                }
+                if (config.enableGeyser || config.serverType == ServerType.GEYSER_STANDALONE) {
+                    onLog(LogMessage(
+                        text = "[MineDroid] Endereço Bedrock: ${config.friendlyBedrockAddress}",
+                        type = LogType.SYSTEM
+                    ))
+                }
 
                 val processBuilder = ProcessBuilder(command)
                 processBuilder.directory(serverDir)

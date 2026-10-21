@@ -29,12 +29,28 @@ object ServerInstaller {
     ): Boolean = withContext(Dispatchers.IO) {
         val serverDir = getServerDirectory(context, config.id)
         val serverJar = File(serverDir, "server.jar")
+        val metaFile = File(serverDir, ".server_meta")
+        val currentMeta = if (metaFile.exists()) metaFile.readText().trim() else ""
+        val targetMeta = "${config.serverType.name}:${config.version}"
 
         try {
             // Caso especial: GeyserMC Standalone (Proxy puro sem servidor Vanilla/Java)
             if (config.serverType == ServerType.GEYSER_STANDALONE) {
-                onProgress("Configurando GeyserMC Standalone Proxy...", 0.10f)
-                if (!serverJar.exists() || serverJar.length() < 1024) {
+                onProgress("Configurando GeyserMC Proxy...", 0.10f)
+                var needsDownload = !serverJar.exists() || serverJar.length() < 1024L || currentMeta != targetMeta
+                if (!needsDownload && serverJar.exists()) {
+                    try {
+                        java.util.zip.ZipFile(serverJar).use { zip ->
+                            val isStandalone = zip.getEntry("org/geysermc/geyser/platform/standalone/GeyserStandaloneBootstrap.class") != null
+                            if (!isStandalone) needsDownload = true
+                        }
+                    } catch (_: Exception) {
+                        needsDownload = true
+                    }
+                }
+
+                if (needsDownload) {
+                    if (serverJar.exists()) serverJar.delete()
                     onProgress("Baixando GeyserMC Standalone...", 0.30f)
                     val geyserStandaloneUrl = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/standalone"
                     val ok = downloadFile(geyserStandaloneUrl, serverJar) { p ->
@@ -44,6 +60,7 @@ object ServerInstaller {
                         onProgress("Falha ao baixar GeyserMC Standalone. Verifique sua conexão com a internet.", 0f)
                         return@withContext false
                     }
+                    metaFile.writeText(targetMeta)
                 }
                 setupGeyserConfig(serverDir, config)
                 if (config.enablePlayitTunnel) {
@@ -51,6 +68,36 @@ object ServerInstaller {
                 }
                 onProgress("GeyserMC Standalone pronto!", 1.0f)
                 return@withContext true
+            }
+
+            // Para motores com mundo próprio (Paper, Purpur, Vanilla, Fabric):
+            var needsDownload = !serverJar.exists() || serverJar.length() < 1024L || currentMeta != targetMeta
+            if (!needsDownload && serverJar.exists()) {
+                try {
+                    java.util.zip.ZipFile(serverJar).use { zip ->
+                        val isStandalone = zip.getEntry("org/geysermc/geyser/platform/standalone/GeyserStandaloneBootstrap.class") != null
+                        if (isStandalone) {
+                            // Era um jar antigo de Geyser Standalone puro! Precisa baixar o motor de mundo
+                            needsDownload = true
+                        }
+                    }
+                } catch (_: Exception) {
+                    needsDownload = true
+                }
+            }
+
+            if (needsDownload) {
+                if (serverJar.exists()) serverJar.delete()
+                // Se mudou de Geyser Standalone para Paper/Purpur/Vanilla, limpa config.yml solto no root para evitar conflito
+                val rootConfigYml = File(serverDir, "config.yml")
+                if (rootConfigYml.exists()) {
+                    try {
+                        val content = rootConfigYml.readText()
+                        if (content.contains("bedrock:") && content.contains("clone-remote-port")) {
+                            rootConfigYml.delete()
+                        }
+                    } catch (_: Exception) {}
+                }
             }
 
             // 1. Accept EULA automatically
@@ -62,8 +109,8 @@ object ServerInstaller {
             onProgress("Configurando server.properties otimizado...", 0.10f)
             writeServerProperties(serverDir, config)
 
-            // 3. Download Server JAR if not exists or requested
-            if (!serverJar.exists() || serverJar.length() < 1024) {
+            // 3. Download Server JAR if needed
+            if (needsDownload) {
                 onProgress("Obtendo link de download do ${config.serverType.displayName} ${config.version}...", 0.15f)
                 val downloadUrl = resolveServerDownloadUrl(config)
 
@@ -77,6 +124,10 @@ object ServerInstaller {
                         onProgress("Falha ao baixar servidor. Verifique a conexão com a internet.", 0f)
                         return@withContext false
                     }
+                    metaFile.writeText(targetMeta)
+                } else {
+                    onProgress("Falha ao encontrar versão ${config.version} do ${config.serverType.displayName}.", 0f)
+                    return@withContext false
                 }
             }
 

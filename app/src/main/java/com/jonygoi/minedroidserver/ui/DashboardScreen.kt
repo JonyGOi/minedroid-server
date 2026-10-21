@@ -660,6 +660,53 @@ fun DashboardScreen(
                             }
                         }
 
+                        if (s.serverType == ServerType.GEYSER_STANDALONE) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MinecraftObsidian),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, MinecraftGold.copy(alpha = 0.6f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Info, contentDescription = null, tint = MinecraftGold, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Apenas Proxy (Sem Mundo Próprio)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MinecraftGold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Geyser Standalone é uma ponte para outro servidor e não gera terreno nem blocos. Para criar um mundo completo e jogar com amigos:",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Button(
+                                        onClick = {
+                                            val updated = s.copy(serverType = ServerType.PAPER, enableGeyser = true, enableFloodgate = true)
+                                            ServerManager.updateServer(context, updated)
+                                            Toast.makeText(context, "Convertido para PaperMC com Crossplay! Inicie o servidor.", Toast.LENGTH_LONG).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth().height(36.dp)
+                                    ) {
+                                        Text(
+                                            text = "Converter para PaperMC (Mundo + Crossplay) ⭐",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MinecraftObsidian
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(12.dp))
 
                         // Action buttons

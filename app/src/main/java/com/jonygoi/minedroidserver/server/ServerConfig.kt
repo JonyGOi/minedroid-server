@@ -3,13 +3,13 @@ package com.jonygoi.minedroidserver.server
 import java.util.UUID
 
 enum class ServerType(val displayName: String, val category: String, val isJava: Boolean) {
-    PAPER("PaperMC", "Java Edition (Recomendado)", true),
-    PURPUR("Purpur", "Java Edition (Ultra Otimizado)", true),
+    PAPER("PaperMC", "Crossplay Java + Bedrock (Recomendado - Com Mundo e Plugins)", true),
+    PURPUR("Purpur", "Crossplay Java + Bedrock (Ultra Otimizado)", true),
     FABRIC("Fabric", "Java Edition (Modded)", true),
-    VANILLA("Vanilla", "Java Edition (Oficial)", true),
-    BEDROCK_DEDICATED("Bedrock Dedicated (BDS)", "Bedrock Edition Nativo", false),
-    POCKETMINE("PocketMine-MP", "Bedrock Edition (Leve)", false),
-    GEYSER_STANDALONE("GeyserMC Standalone", "Proxy Bedrock (Sem Vanilla/Java pesado)", true)
+    VANILLA("Vanilla", "Java Edition (Oficial Mojang)", true),
+    BEDROCK_DEDICATED("Bedrock Dedicated (BDS)", "Bedrock Edition Nativo C++", false),
+    POCKETMINE("PocketMine-MP", "Bedrock Edition PHP (Leve)", false),
+    GEYSER_STANDALONE("GeyserMC Proxy", "Apenas Ponte/Proxy (Sem Mundo - Requer Servidor Java Externo)", true)
 }
 
 enum class DomainType(val displayName: String, val suffix: String) {
