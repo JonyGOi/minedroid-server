@@ -397,26 +397,163 @@ object PlayitManager {
         return candidate
     }
 
-    /**
-     * Cria um túnel no Playit.gg via CLI nativa se ele ainda não existir
-     */
-    suspend fun createTunnel(context: Context, tunnelType: String): Boolean = withContext(Dispatchers.IO) {
-        val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
-        if (!playitBin.exists() || playitBin.length() == 0L) return@withContext false
+    data class TunnelDetails(
+        val domain: String,
+        val isBedrock: Boolean,
+        val localPort: Int,
+        val portType: String
+    )
 
-        val playitDir = File(context.filesDir, "playit").apply { mkdirs() }
-        val savedSecret = getSavedSecretKey(context)
-        if (savedSecret.isNullOrBlank()) return@withContext false
+    /**
+     * Cria um túnel diretamente na API do Playit.gg usando a chave de autenticação (Bearer Token)
+     */
+    suspend fun createTunnelViaApi(
+        secretKey: String,
+        tunnelType: String = "minecraft-bedrock",
+        localPort: Int = 19132
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (secretKey.isBlank()) return@withContext false
+
+        val endpoints = listOf(
+            "https://api.playit.gg/tunnels/create",
+            "https://api.playit.gg/v1/tunnels/create"
+        )
 
         val isBedrock = tunnelType.contains("bedrock", ignoreCase = true)
         val name = if (isBedrock) "bedrock" else "java"
         val portType = if (isBedrock) "udp" else "tcp"
 
-        // 1. Sintaxe oficial playit-cli: tunnels create <tunnel_type> <name> <port_type> <port_count>
+        val body = JSONObject().apply {
+            put("name", name)
+            put("tunnel_type", tunnelType)
+            put("port_type", portType)
+            put("port_count", 1)
+            put("origin", JSONObject().apply {
+                put("type", "default")
+                put("data", JSONObject().apply {
+                    put("local_ip", "127.0.0.1")
+                    put("local_port", localPort)
+                })
+            })
+            put("enabled", true)
+        }.toString()
+
+        for (endpoint in endpoints) {
+            try {
+                val url = URL(endpoint)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                conn.setRequestProperty("User-Agent", "playit-cli/0.15.26")
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Accept", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer $secretKey")
+                conn.doOutput = true
+
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+
+                val code = conn.responseCode
+                val res = if (code in 200..299) {
+                    conn.inputStream.bufferedReader().use { it.readText() }
+                } else {
+                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                }
+
+                if (code in 200..299) {
+                    val json = JSONObject(res)
+                    if (json.optString("status") == "success") {
+                        return@withContext true
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        false
+    }
+
+    /**
+     * Consulta túneis existentes da conta diretamente na API do Playit.gg
+     */
+    suspend fun fetchTunnelsViaApi(secretKey: String): List<TunnelDetails> = withContext(Dispatchers.IO) {
+        val result = mutableListOf<TunnelDetails>()
+        if (secretKey.isBlank()) return@withContext result
+
+        val endpoints = listOf(
+            "https://api.playit.gg/tunnels/list",
+            "https://api.playit.gg/v1/tunnels/list"
+        )
+
+        for (endpoint in endpoints) {
+            try {
+                val url = URL(endpoint)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                conn.setRequestProperty("User-Agent", "playit-cli/0.15.26")
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("Accept", "application/json")
+                conn.setRequestProperty("Authorization", "Bearer $secretKey")
+                conn.doOutput = true
+                conn.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    val res = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(res)
+                    val dataObj = json.optJSONObject("data")
+                    val arr = dataObj?.optJSONArray("tunnels") ?: json.optJSONArray("data")
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            val item = arr.getJSONObject(i)
+                            val domain = item.optString("assigned_domain", "").ifBlank {
+                                item.optString("custom_domain", "")
+                            }
+                            val tType = item.optString("tunnel_type", "")
+                            val pType = item.optString("port_type", "")
+                            val lPort = item.optInt("local_port", 0)
+                            val isB = tType.contains("bedrock", ignoreCase = true) ||
+                                      pType.equals("udp", ignoreCase = true) ||
+                                      lPort == 19132
+                            if (domain.isNotBlank()) {
+                                result.add(TunnelDetails(domain, isB, lPort, pType))
+                            }
+                        }
+                        if (result.isNotEmpty()) break
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        result
+    }
+
+    /**
+     * Cria um túnel no Playit.gg via API ou CLI
+     */
+    suspend fun createTunnel(context: Context, tunnelType: String): Boolean = withContext(Dispatchers.IO) {
+        val savedSecret = getSavedSecretKey(context)
+        val isBedrock = tunnelType.contains("bedrock", ignoreCase = true)
+        val localPort = if (isBedrock) 19132 else 25565
+
+        if (!savedSecret.isNullOrBlank()) {
+            val apiOk = createTunnelViaApi(savedSecret, tunnelType, localPort)
+            if (apiOk) return@withContext true
+        }
+
+        val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
+        if (!playitBin.exists() || playitBin.length() == 0L) return@withContext false
+
+        val playitDir = File(context.filesDir, "playit").apply { mkdirs() }
+        val name = if (isBedrock) "bedrock" else "java"
+        val portType = if (isBedrock) "udp" else "tcp"
+
         val cmdFull = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType, name, portType, "1")
         if (executePlayitCommand(cmdFull, playitDir, context)) return@withContext true
 
-        // 2. Fallback
         val cmdSimple = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType)
         executePlayitCommand(cmdSimple, playitDir, context)
     }
@@ -473,12 +610,8 @@ object PlayitManager {
                 }
                 if (bedrockItem != null) {
                     onBedrockDomain(bedrockItem.second)
-                } else if (discoveredList.size >= 2 && javaItem != null) {
-                    val second = discoveredList.find { it.second != javaItem.second }
-                    if (second != null) {
-                        onBedrockDomain(second.second)
-                    }
                 }
+                // NUNCA atribuir um segundo túnel Java nominal como Bedrock!
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -528,21 +661,31 @@ object PlayitManager {
         if (savedSecret.isNullOrBlank()) return@withContext
 
         try {
-            // Tenta consultar túneis já existentes primeiro
-            queryExistingTunnels(
-                context = context,
-                onJavaDomain = { jDomain -> ServerManager.updateActiveServerDomain(jDomain) },
-                onBedrockDomain = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
-            )
+            // 1. Tenta consultar túneis existentes via API oficial
+            val existing = fetchTunnelsViaApi(savedSecret)
+            val hasBedrock = existing.any { it.isBedrock }
+            val hasJava = existing.any { !it.isBedrock }
+
+            existing.find { !it.isBedrock }?.let { ServerManager.updateActiveServerDomain(it.domain) }
+            existing.find { it.isBedrock }?.let { ServerManager.updateActiveServerBedrockDomain(it.domain) }
 
             var tunnelsCreated = false
-            if (needJava) {
-                val created = createTunnel(context, "minecraft-java")
+            if (needJava && !hasJava) {
+                val created = createTunnelViaApi(savedSecret, "minecraft-java", 25565)
                 if (created) tunnelsCreated = true
             }
-            if (needBedrock) {
-                val created = createTunnel(context, "minecraft-bedrock")
+            if (needBedrock && !hasBedrock) {
+                val created = createTunnelViaApi(savedSecret, "minecraft-bedrock", 19132)
                 if (created) tunnelsCreated = true
+            }
+
+            // Fallback caso a API direta não tenha retornado
+            if (existing.isEmpty()) {
+                queryExistingTunnels(
+                    context = context,
+                    onJavaDomain = { jDomain -> ServerManager.updateActiveServerDomain(jDomain) },
+                    onBedrockDomain = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
+                )
             }
 
             // Se novos túneis foram criados e o processo do Playit já estava rodando,

@@ -205,6 +205,14 @@ object ServerInstaller {
                 if (oldPlayitConfigFolder.exists()) oldPlayitConfigFolder.deleteRecursively()
             } catch (_: Exception) {}
 
+            // Garante que permissions.yml não cause ClassCastException no Bukkit/Paper
+            try {
+                val permFile = File(serverDir, "permissions.yml")
+                if (!permFile.exists() || permFile.length() < 5L || permFile.readText().contains("[]")) {
+                    permFile.writeText("# Permissions file for MineDroid Server\n")
+                }
+            } catch (_: Exception) {}
+
             onProgress("Tudo pronto para iniciar!", 1.0f)
             true
         } catch (e: Exception) {
@@ -295,6 +303,11 @@ object ServerInstaller {
                 var text = configFile.readText()
                 text = text.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.geyserPort}")
                 text = text.replace(Regex("""(?m)^(\s*auth-type:\s*)\w+"""), "$1$authType")
+                if (!text.contains("clone-remote-port:")) {
+                    text = text.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  clone-remote-port: false")
+                } else {
+                    text = text.replace(Regex("""(?m)^(\s*clone-remote-port:\s*)true"""), "$1false")
+                }
                 configFile.writeText(text)
             } else {
                 val cleanName = config.name.replace("\"", "").replace("'", "")

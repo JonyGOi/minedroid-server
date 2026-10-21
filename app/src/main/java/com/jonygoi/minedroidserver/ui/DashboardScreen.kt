@@ -553,31 +553,157 @@ fun DashboardScreen(
                                     if (s.serverType != ServerType.GEYSER_STANDALONE) {
                                         HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
                                     }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                            Icon(Icons.Default.Smartphone, contentDescription = null, tint = MinecraftLapis, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Column {
-                                                Text("Bedrock (Celular / Console)", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.SemiBold)
-                                                Text(
-                                                    text = s.friendlyBedrockAddress,
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = TextPrimary,
-                                                    fontFamily = FontFamily.Monospace
-                                                )
+                                    if (s.bedrockDomain.isNotBlank()) {
+                                        val parts = s.bedrockDomain.split(":")
+                                        val bHost = parts.getOrNull(0) ?: s.bedrockDomain
+                                        val bPort = parts.getOrNull(1) ?: s.geyserPort.toString()
+
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                    Icon(Icons.Default.Smartphone, contentDescription = null, tint = MinecraftLapis, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Column {
+                                                        Text("Bedrock (Celular / Console)", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.SemiBold)
+                                                        Text(
+                                                            text = "$bHost : $bPort",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = TextPrimary,
+                                                            fontFamily = FontFamily.Monospace
+                                                        )
+                                                    }
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        copyToClipboard(context, "$bHost:$bPort")
+                                                        Toast.makeText(context, "Endereço Bedrock copiado!", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier.size(36.dp)
+                                                ) {
+                                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar Tudo", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                                }
+                                            }
+
+                                            // Atalhos rápidos para copiar IP e Porta separadamente (exigido pelo Minecraft Bedrock)
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        copyToClipboard(context, bHost)
+                                                        Toast.makeText(context, "IP Bedrock copiado: $bHost", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.weight(1f).height(28.dp),
+                                                    border = BorderStroke(1.dp, MinecraftBorder)
+                                                ) {
+                                                    Text("Copiar IP: $bHost", fontSize = 10.sp, color = TextSecondary, maxLines = 1)
+                                                }
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        copyToClipboard(context, bPort)
+                                                        Toast.makeText(context, "Porta Bedrock copiada: $bPort", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.weight(0.6f).height(28.dp),
+                                                    border = BorderStroke(1.dp, MinecraftBorder)
+                                                ) {
+                                                    Text("Porta: $bPort", fontSize = 10.sp, color = MinecraftEmerald, maxLines = 1)
+                                                }
                                             }
                                         }
-                                        if (s.bedrockDomain.isNotBlank()) {
-                                            IconButton(
-                                                onClick = { copyToClipboard(context, s.friendlyBedrockAddress) },
-                                                modifier = Modifier.size(36.dp)
+                                    } else {
+                                        // Túnel Bedrock ainda não configurado no Playit.gg
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(MinecraftRedstone.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Warning, contentDescription = null, tint = MinecraftGold, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Túnel Bedrock (UDP :19132) Não Detectado",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MinecraftGold
+                                                )
+                                            }
+                                            Text(
+                                                text = "Seus túneis no Playit estão apontados apenas para Java (TCP 25565). Para que amigos entrem pelo celular/Bedrock, é necessário um túnel Minecraft Bedrock (UDP 19132).",
+                                                fontSize = 10.sp,
+                                                color = TextSecondary
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                                Button(
+                                                    onClick = {
+                                                        try {
+                                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://playit.gg/account/tunnels"))
+                                                            context.startActivity(intent)
+                                                        } catch (_: Exception) {}
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftCardSurface),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.weight(1f).height(30.dp),
+                                                    border = BorderStroke(1.dp, MinecraftBorder)
+                                                ) {
+                                                    Text("Abrir Playit.gg", fontSize = 11.sp, color = TextPrimary)
+                                                }
+
+                                                var isCreatingTunnel by remember { mutableStateOf(false) }
+                                                Button(
+                                                    onClick = {
+                                                        val secret = savedSecret
+                                                        if (!secret.isNullOrBlank()) {
+                                                            isCreatingTunnel = true
+                                                            coroutineScope.launch(Dispatchers.IO) {
+                                                                val ok = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
+                                                                withContext(Dispatchers.Main) {
+                                                                    isCreatingTunnel = false
+                                                                    if (ok) {
+                                                                        Toast.makeText(context, "Túnel Bedrock criado com sucesso! Reiniciando agente...", Toast.LENGTH_SHORT).show()
+                                                                        PlayitTunnelProcess.stop()
+                                                                        PlayitTunnelProcess.start(
+                                                                            context = context,
+                                                                            onLog = { msg -> ServerManager.addLog(msg) },
+                                                                            onDomainFound = { d -> ServerManager.updateActiveServerDomain(d) },
+                                                                            onBedrockDomainFound = { bd -> ServerManager.updateActiveServerBedrockDomain(bd) }
+                                                                        )
+                                                                    } else {
+                                                                        Toast.makeText(context, "Não foi possível criar automaticamente. Abra o painel playit.gg", Toast.LENGTH_LONG).show()
+                                                                    }
+                                                                }
+                                                            }
+                                                        } else {
+                                                            Toast.makeText(context, "Vincule sua conta Playit primeiro!", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                    enabled = !isCreatingTunnel,
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    modifier = Modifier.weight(1f).height(30.dp)
+                                                ) {
+                                                    if (isCreatingTunnel) {
+                                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MinecraftObsidian)
+                                                    } else {
+                                                        Text("Criar Automático", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MinecraftObsidian)
+                                                    }
+                                                }
                                             }
                                         }
                                     }

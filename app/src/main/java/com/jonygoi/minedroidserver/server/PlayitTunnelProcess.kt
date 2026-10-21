@@ -138,39 +138,41 @@ object PlayitTunnelProcess {
                     if (domain != null && cleanMsg.contains("=>")) {
                         val isBedrock = cleanMsg.contains("bedrock", ignoreCase = true) ||
                                         cleanMsg.contains("19132") ||
-                                        cleanMsg.contains("udp", ignoreCase = true)
+                                        (cleanMsg.contains("udp", ignoreCase = true) && !cleanMsg.contains("tcp", ignoreCase = true))
+                        val isJava = cleanMsg.contains("java", ignoreCase = true) ||
+                                     cleanMsg.contains("25565") ||
+                                     (cleanMsg.contains("tcp", ignoreCase = true) && !cleanMsg.contains("udp", ignoreCase = true))
+
                         val isNew = discoveredTunnels.add(cleanMsg)
                         if (isNew) {
                             if (isBedrock) {
                                 assignedBedrockDomain = domain
                                 onLog(LogMessage("[Playit.gg] 📱 Túnel Bedrock ativo: $cleanMsg", LogType.SYSTEM))
                                 onBedrockDomainFound(domain)
-                            } else {
-                                // Se já atribuímos um domínio Java diferente e o Bedrock ainda não está definido,
-                                // o segundo túnel descoberto na conta é o Bedrock!
-                                if (assignedJavaDomain != null && assignedJavaDomain != domain && assignedBedrockDomain == null) {
-                                    assignedBedrockDomain = domain
-                                    onLog(LogMessage("[Playit.gg] 📱 Túnel Bedrock ativo (2º túnel): $cleanMsg", LogType.SYSTEM))
-                                    onBedrockDomainFound(domain)
-                                } else {
+                            } else if (isJava) {
+                                // Se o servidor ativo salvou indevidamente este domínio Java como Bedrock no passado, limpa o valor falso
+                                val activeConfig = ServerManager.getActiveConfig()
+                                if (activeConfig != null && activeConfig.bedrockDomain == domain) {
+                                    ServerManager.updateActiveServerBedrockDomain("")
+                                }
+
+                                if (assignedJavaDomain == null) {
                                     assignedJavaDomain = domain
-                                    onLog(LogMessage("[Playit.gg] ☕ Túnel Java ativo: $cleanMsg", LogType.SYSTEM))
                                     onDomainFound(domain)
                                 }
+                                onLog(LogMessage("[Playit.gg] ☕ Túnel Java ativo: $cleanMsg", LogType.SYSTEM))
+                            } else {
+                                onLog(LogMessage("[Playit.gg] 🌐 Túnel ativo: $cleanMsg", LogType.SYSTEM))
                             }
                         }
                         continue
-                    } else if (domain != null) {
+                    } else if (domain != null && !cleanMsg.contains("http", ignoreCase = true)) {
                         val isNew = discoveredTunnels.add(domain)
                         if (isNew) {
                             if (assignedJavaDomain == null) {
                                 assignedJavaDomain = domain
                                 onLog(LogMessage("[Playit.gg] ✅ Túnel Java nominal ativo: $domain", LogType.SYSTEM))
                                 onDomainFound(domain)
-                            } else if (assignedBedrockDomain == null && domain != assignedJavaDomain) {
-                                assignedBedrockDomain = domain
-                                onLog(LogMessage("[Playit.gg] ✅ Túnel Bedrock nominal ativo: $domain", LogType.SYSTEM))
-                                onBedrockDomainFound(domain)
                             }
                         }
                     }
@@ -185,6 +187,31 @@ object PlayitTunnelProcess {
                         if (!initialStatusLogged && cleanMsg.contains("tunnel running", ignoreCase = true)) {
                             initialStatusLogged = true
                             onLog(LogMessage("[Playit.gg] ✅ Túnel conectado e em execução com sucesso!", LogType.SYSTEM))
+
+                            // Se o servidor ativo exige Bedrock (Geyser ou Proxy Standalone) e nenhum túnel Bedrock UDP foi encontrado
+                            val activeCfg = ServerManager.getActiveConfig()
+                            val needsBedrock = activeCfg?.enableGeyser == true || activeCfg?.serverType == ServerType.GEYSER_STANDALONE
+                            if (needsBedrock && assignedBedrockDomain == null) {
+                                onLog(LogMessage("[Playit.gg] ⚠️ ATENÇÃO BEDROCK: Nenhum túnel Bedrock (UDP :19132) foi detectado na sua conta Playit!", LogType.WARN))
+                                onLog(LogMessage("[Playit.gg] ⚠️ Seus túneis ativos são apenas Java (TCP :25565). O GeyserMC está ouvindo localmente na UDP :19132, mas precisa de um túnel Bedrock no Playit para receber conexões externas pelo celular.", LogType.WARN))
+                                onLog(LogMessage("[Playit.gg] 👉 Acesse https://playit.gg/account/tunnels e altere o túnel para 'Minecraft Bedrock' (UDP :19132), ou clique em 'Criar Automático' no app.", LogType.WARN))
+
+                                // Tentativa de criação automática via API Playit.gg
+                                val secret = PlayitManager.getSavedSecretKey(context)
+                                if (!secret.isNullOrBlank()) {
+                                    processScope?.launch {
+                                        val ok = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
+                                        if (ok) {
+                                            onLog(LogMessage("[Playit.gg] ⚡ Túnel Bedrock provisionado via API com sucesso! Reiniciando agente...", LogType.SYSTEM))
+                                            delay(1500)
+                                            withContext(Dispatchers.Main) {
+                                                stop()
+                                                start(context, onLog, onDomainFound, onBedrockDomainFound, onClaimUrlFound)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         continue
                     }
