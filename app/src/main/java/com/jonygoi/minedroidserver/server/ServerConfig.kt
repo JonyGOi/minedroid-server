@@ -22,6 +22,7 @@ data class ServerConfig(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "Meu Servidor Minecraft",
     val customDomain: String = "",
+    val bedrockDomain: String = "",
     val domainType: DomainType = DomainType.PLAYIT,
     val enablePlayitTunnel: Boolean = true,
     val serverType: ServerType = ServerType.PAPER,
@@ -54,6 +55,9 @@ data class ServerConfig(
 
     val friendlyBedrockAddress: String
         get() = when {
+            bedrockDomain.isNotBlank() -> {
+                if (bedrockDomain.contains(":")) bedrockDomain else "$bedrockDomain:$geyserPort"
+            }
             customDomain.isNotBlank() -> {
                 val base = customDomain.split(":").first()
                 "$base:$geyserPort"

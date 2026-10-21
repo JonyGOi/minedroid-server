@@ -22,6 +22,7 @@ object PlayitTunnelProcess {
         context: Context,
         onLog: (LogMessage) -> Unit = {},
         onDomainFound: (String) -> Unit = {},
+        onBedrockDomainFound: (String) -> Unit = {},
         onClaimUrlFound: (String) -> Unit = {}
     ) {
         if (isRunning()) return
@@ -95,6 +96,9 @@ object PlayitTunnelProcess {
                 val reader = BufferedReader(InputStreamReader(proc.inputStream))
                 var line: String?
 
+                val discoveredTunnels = mutableSetOf<String>()
+                var initialStatusLogged = false
+
                 while (reader.readLine().also { line = it } != null) {
                     val rawMsg = line ?: continue
                     val cleanMsg = stripAnsi(rawMsg).trim()
@@ -107,29 +111,6 @@ object PlayitTunnelProcess {
                         onLog(LogMessage("[Playit.gg] 🔗 Autorize seu servidor no navegador: $claimUrl", LogType.WARN))
                         onClaimUrlFound(claimUrl)
                         PlayitManager.setLiveClaimUrl(claimUrl)
-                    }
-
-                    // 2. Detectar endereço público nominal (xyz.ply.gg / joinmc.link / etc.)
-                    val domain = PlayitManager.parsePlayitDomainFromLog(cleanMsg)
-                    if (domain != null) {
-                        onLog(LogMessage("[Playit.gg] ✅ Túnel nominal ativo: $domain", LogType.SYSTEM))
-                        onDomainFound(domain)
-
-                        // Se o playit salvou uma chave nova no playit.toml, sincroniza com as preferências do app
-                        try {
-                            for (dir in configDirs) {
-                                val toml = File(dir, "playit.toml")
-                                if (toml.exists()) {
-                                    val content = toml.readText()
-                                    val secretMatch = Regex("""(?:secret|secret_key)\s*=\s*\"([^\"]+)\"""").find(content)
-                                    if (secretMatch != null) {
-                                        val secret = secretMatch.groupValues[1]
-                                        PlayitManager.saveSecretKey(context, secret)
-                                        break
-                                    }
-                                }
-                            }
-                        } catch (_: Exception) {}
                     }
 
                     // Sincroniza a chave se o agente foi aprovado na web
@@ -150,11 +131,47 @@ object PlayitTunnelProcess {
                         } catch (_: Exception) {}
                     }
 
-                    // 3. Exibir mensagens de túnel no console do servidor com categorização adequada
+                    // 2. Detectar linha de mapeamento de túnel (ex: xyz.tun.ply.gg => 127.0.0.1:25565 (minecraft-java))
+                    val domain = PlayitManager.parsePlayitDomainFromLog(cleanMsg)
+                    if (domain != null && cleanMsg.contains("=>")) {
+                        val isBedrock = cleanMsg.contains("bedrock", ignoreCase = true) || cleanMsg.contains("19132")
+                        val isNew = discoveredTunnels.add(cleanMsg)
+                        if (isNew) {
+                            if (isBedrock) {
+                                onLog(LogMessage("[Playit.gg] 📱 Túnel Bedrock ativo: $cleanMsg", LogType.SYSTEM))
+                                onBedrockDomainFound(domain)
+                            } else {
+                                onLog(LogMessage("[Playit.gg] ☕ Túnel Java ativo: $cleanMsg", LogType.SYSTEM))
+                                onDomainFound(domain)
+                            }
+                        }
+                        continue
+                    } else if (domain != null) {
+                        val isNew = discoveredTunnels.add(domain)
+                        if (isNew) {
+                            onLog(LogMessage("[Playit.gg] ✅ Túnel nominal ativo: $domain", LogType.SYSTEM))
+                            onDomainFound(domain)
+                        }
+                    }
+
+                    // 3. Filtrar atualizações periódicas repetitivas da interface TUI do Playit (evita flood no console)
+                    val isTuiHeartbeat = cleanMsg.contains("tunnel running,", ignoreCase = true) ||
+                                         cleanMsg.equals("TUNNELS", ignoreCase = true) ||
+                                         cleanMsg.contains("doing auto run", ignoreCase = true)
+
+                    if (isTuiHeartbeat) {
+                        // Loga apenas a primeira confirmação de inicialização do túnel
+                        if (!initialStatusLogged && cleanMsg.contains("tunnel running", ignoreCase = true)) {
+                            initialStatusLogged = true
+                            onLog(LogMessage("[Playit.gg] ✅ Túnel conectado e em execução com sucesso!", LogType.SYSTEM))
+                        }
+                        continue
+                    }
+
+                    // 4. Exibir mensagens de túnel relevantes no console do servidor
                     val type = when {
                         cleanMsg.contains("error", ignoreCase = true) || cleanMsg.contains("failed", ignoreCase = true) -> LogType.ERROR
                         cleanMsg.contains("warn", ignoreCase = true) -> LogType.WARN
-                        cleanMsg.contains("tunnel running", ignoreCase = true) ||
                         cleanMsg.contains("connected", ignoreCase = true) ||
                         cleanMsg.contains("registered", ignoreCase = true) ||
                         cleanMsg.contains("agent has", ignoreCase = true) -> LogType.SYSTEM
@@ -194,6 +211,11 @@ object PlayitTunnelProcess {
     }
 
     private fun stripAnsi(text: String): String {
-        return text.replace(Regex("\u001B\\[[;\\d]*m"), "")
+        return text
+            .replace(Regex("\u001B\\[[0-9;?]*[a-zA-Z]"), "")
+            .replace(Regex("\u001B[0-9=><()#]"), "")
+            .replace(Regex("""\[\d*[A-Za-z]"""), "")
+            .replace(Regex("""\[2J\d*"""), "")
+            .trim()
     }
 }

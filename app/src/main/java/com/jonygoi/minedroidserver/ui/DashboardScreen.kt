@@ -831,10 +831,18 @@ fun DashboardScreen(
                                 PlayitTunnelProcess.start(
                                     context = context,
                                     onLog = { msg -> ServerManager.addLog(msg) },
-                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                    onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
                                 )
                                 if (savedSecret.isNullOrBlank()) {
                                     playitSessionToConfirm = PlayitClaimSession("", "")
+                                } else {
+                                    coroutineScope.launch {
+                                        val active = activeConfig
+                                        val needJava = active == null || active.serverType != ServerType.GEYSER_STANDALONE
+                                        val needBedrock = active == null || active.enableGeyser || active.serverType == ServerType.GEYSER_STANDALONE
+                                        PlayitManager.ensureTunnelsExist(context, needJava, needBedrock)
+                                    }
                                 }
                             },
                             modifier = Modifier.weight(1f).height(44.dp),
@@ -852,7 +860,8 @@ fun DashboardScreen(
                             PlayitTunnelProcess.start(
                                 context = context,
                                 onLog = { msg -> ServerManager.addLog(msg) },
-                                onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
                             )
                             playitSessionToConfirm = PlayitClaimSession("", "")
                         },

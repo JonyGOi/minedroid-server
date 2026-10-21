@@ -5,8 +5,10 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Random
@@ -392,5 +394,66 @@ object PlayitManager {
         }
 
         return candidate
+    }
+
+    /**
+     * Cria um túnel no Playit.gg via CLI nativa se ele ainda não existir
+     */
+    suspend fun createTunnel(context: Context, tunnelType: String): Boolean = withContext(Dispatchers.IO) {
+        val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
+        if (!playitBin.exists() || playitBin.length() == 0L) return@withContext false
+
+        val playitDir = File(context.filesDir, "playit").apply { mkdirs() }
+        val savedSecret = getSavedSecretKey(context)
+        if (savedSecret.isNullOrBlank()) return@withContext false
+
+        try {
+            val cmd = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType)
+            val pb = ProcessBuilder(cmd)
+            pb.directory(playitDir)
+            pb.redirectErrorStream(true)
+
+            val env = pb.environment()
+            env["HOME"] = playitDir.absolutePath
+            val tmpDir = File(context.filesDir, "tmp").apply { mkdirs() }
+            env["TMPDIR"] = tmpDir.absolutePath
+            env["PATH"] = "/system/bin:/system/xbin"
+
+            val proc = pb.start()
+            val reader = BufferedReader(InputStreamReader(proc.inputStream))
+            while (reader.readLine() != null) {}
+            val completed = proc.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+            if (!completed) {
+                proc.destroy()
+                return@withContext false
+            }
+            return@withContext proc.exitValue() == 0
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext false
+        }
+    }
+
+    /**
+     * Garante que os túneis necessários (Java e/ou Bedrock) estejam provisionados na conta Playit
+     */
+    suspend fun ensureTunnelsExist(
+        context: Context,
+        needJava: Boolean = true,
+        needBedrock: Boolean = true
+    ) = withContext(Dispatchers.IO) {
+        val savedSecret = getSavedSecretKey(context)
+        if (savedSecret.isNullOrBlank()) return@withContext
+
+        try {
+            if (needJava) {
+                createTunnel(context, "minecraft-java")
+            }
+            if (needBedrock) {
+                createTunnel(context, "minecraft-bedrock")
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }

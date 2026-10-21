@@ -45,6 +45,10 @@ object ServerInstaller {
                         return@withContext false
                     }
                 }
+                setupGeyserConfig(serverDir, config)
+                if (config.enablePlayitTunnel) {
+                    PlayitManager.ensureTunnelsExist(context, needJava = false, needBedrock = true)
+                }
                 onProgress("GeyserMC Standalone pronto!", 1.0f)
                 return@withContext true
             }
@@ -76,7 +80,7 @@ object ServerInstaller {
                 }
             }
 
-            // 4. Download GeyserMC & Floodgate if crossplay is enabled (Apenas para Paper / Purpur com suporte a Spigot)
+            // 4. Download GeyserMC, Floodgate & ViaVersion if crossplay is enabled (Apenas para Paper / Purpur com suporte a Spigot)
             if (config.enableGeyser && (config.serverType == ServerType.PAPER || config.serverType == ServerType.PURPUR)) {
                 val pluginsDir = getPluginsDirectory(context, config.id)
                 val geyserJar = File(pluginsDir, "Geyser-Spigot.jar")
@@ -85,31 +89,54 @@ object ServerInstaller {
                     onProgress("Baixando GeyserMC (Crossplay Bedrock)...", 0.68f)
                     val geyserUrl = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
                     downloadFile(geyserUrl, geyserJar) { p ->
-                        onProgress("Baixando GeyserMC: ${(p * 100).toInt()}%", 0.68f + (p * 0.12f))
+                        onProgress("Baixando GeyserMC: ${(p * 100).toInt()}%", 0.68f + (p * 0.10f))
                     }
                 }
 
                 if (config.enableFloodgate) {
                     val floodgateJar = File(pluginsDir, "floodgate-spigot.jar")
                     if (!floodgateJar.exists() || floodgateJar.length() < 1024) {
-                        onProgress("Baixando Floodgate (Entrada sem conta Java)...", 0.80f)
+                        onProgress("Baixando Floodgate (Entrada sem conta Java)...", 0.78f)
                         val floodgateUrl = "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
                         downloadFile(floodgateUrl, floodgateJar) { p ->
-                            onProgress("Baixando Floodgate: ${(p * 100).toInt()}%", 0.80f + (p * 0.08f))
+                            onProgress("Baixando Floodgate: ${(p * 100).toInt()}%", 0.78f + (p * 0.06f))
                         }
                     }
                 }
+
+                // Download ViaVersion (Permite conexões de jogadores em todas as versões do Minecraft Java e Bedrock)
+                val viaVersionJar = File(pluginsDir, "ViaVersion.jar")
+                if (!viaVersionJar.exists() || viaVersionJar.length() < 1024) {
+                    onProgress("Baixando ViaVersion (Compatibilidade de Versões)...", 0.84f)
+                    val viaUrl = "https://api.spiget.org/v2/resources/19254/download"
+                    val ok = downloadFile(viaUrl, viaVersionJar) { p ->
+                        onProgress("Baixando ViaVersion: ${(p * 100).toInt()}%", 0.84f + (p * 0.06f))
+                    }
+                    if (!ok) {
+                        val fallbackUrl = "https://github.com/ViaVersion/ViaVersion/releases/download/5.12.1/ViaVersion-5.12.1.jar"
+                        downloadFile(fallbackUrl, viaVersionJar) {}
+                    }
+                }
+
+                // Configuração das portas, motd e autenticação floodgate/offline
+                setupGeyserConfig(serverDir, config)
             }
 
-            // 5. Download Playit.gg Plugin se habilitado (Opcional como backup para Paper / Purpur; Vanilla e Geyser usam libplayit nativo)
-            if (config.enablePlayitTunnel && (config.serverType == ServerType.PAPER || config.serverType == ServerType.PURPUR)) {
-                val pluginsDir = getPluginsDirectory(context, config.id)
-                onProgress("Configurando túnel automático Playit.gg...", 0.90f)
-                PlayitManager.downloadPlayitPlugin(pluginsDir)
+            // 5. Download Playit.gg Plugin e criação automática de túneis se habilitado
+            if (config.enablePlayitTunnel) {
+                onProgress("Configurando túneis automáticos Playit.gg...", 0.90f)
+                val needJava = config.serverType != ServerType.GEYSER_STANDALONE
+                val needBedrock = config.enableGeyser || config.serverType == ServerType.GEYSER_STANDALONE
+                PlayitManager.ensureTunnelsExist(context, needJava = needJava, needBedrock = needBedrock)
 
-                val savedSecret = PlayitManager.getSavedSecretKey(context)
-                if (!savedSecret.isNullOrBlank()) {
-                    PlayitManager.setupPlayitConfig(serverDir, savedSecret)
+                if (config.serverType == ServerType.PAPER || config.serverType == ServerType.PURPUR) {
+                    val pluginsDir = getPluginsDirectory(context, config.id)
+                    PlayitManager.downloadPlayitPlugin(pluginsDir)
+
+                    val savedSecret = PlayitManager.getSavedSecretKey(context)
+                    if (!savedSecret.isNullOrBlank()) {
+                        PlayitManager.setupPlayitConfig(serverDir, savedSecret)
+                    }
                 }
             }
 
@@ -143,6 +170,57 @@ object ServerInstaller {
             appendLine("white-list=false")
         }.toString()
         propsFile.writeText(content)
+    }
+
+    private fun setupGeyserConfig(serverDir: File, config: ServerConfig) {
+        try {
+            val geyserDir = if (config.serverType == ServerType.GEYSER_STANDALONE) {
+                serverDir
+            } else {
+                File(File(serverDir, "plugins"), "Geyser-Spigot")
+            }
+            if (!geyserDir.exists()) geyserDir.mkdirs()
+
+            val configFile = File(geyserDir, "config.yml")
+            val authType = when {
+                config.enableFloodgate -> "floodgate"
+                !config.onlineMode -> "offline"
+                else -> "online"
+            }
+
+            val remoteAddress = if (config.serverType == ServerType.GEYSER_STANDALONE) "127.0.0.1" else "auto"
+
+            if (configFile.exists()) {
+                var text = configFile.readText()
+                text = text.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.geyserPort}")
+                text = text.replace(Regex("""(?m)^(\s*auth-type:\s*)\w+"""), "$1$authType")
+                configFile.writeText(text)
+            } else {
+                val cleanName = config.name.replace("\"", "").replace("'", "")
+                val yaml = buildString {
+                    appendLine("# Configuração GeyserMC gerada automaticamente pelo MineDroid Server")
+                    appendLine("bedrock:")
+                    appendLine("  address: 0.0.0.0")
+                    appendLine("  port: ${config.geyserPort}")
+                    appendLine("  clone-remote-port: false")
+                    appendLine("  motd1: \"$cleanName\"")
+                    appendLine("  motd2: \"MineDroid Bedrock Crossplay\"")
+                    appendLine("remote:")
+                    appendLine("  address: $remoteAddress")
+                    appendLine("  port: ${config.serverPort}")
+                    appendLine("  auth-type: $authType")
+                    appendLine("  use-proxy-protocol: false")
+                    appendLine("passthrough-motd: true")
+                    appendLine("passthrough-player-counts: true")
+                    appendLine("passthrough-protocol-name: true")
+                    appendLine("show-cooldown: title")
+                    appendLine("default-locale: pt_br")
+                }
+                configFile.writeText(yaml)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun resolveServerDownloadUrl(config: ServerConfig): String? {

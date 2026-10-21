@@ -33,6 +33,7 @@ object ServerStorage {
                         id = obj.optString("id", java.util.UUID.randomUUID().toString()),
                         name = obj.optString("name", "Servidor"),
                         customDomain = obj.optString("customDomain", ""),
+                        bedrockDomain = obj.optString("bedrockDomain", ""),
                         domainType = DomainType.valueOf(obj.optString("domainType", DomainType.PLAYIT.name)),
                         enablePlayitTunnel = obj.optBoolean("enablePlayitTunnel", true),
                         serverType = ServerType.valueOf(obj.optString("serverType", ServerType.PAPER.name)),
@@ -73,6 +74,7 @@ object ServerStorage {
                     put("id", s.id)
                     put("name", s.name)
                     put("customDomain", s.customDomain)
+                    put("bedrockDomain", s.bedrockDomain)
                     put("domainType", s.domainType.name)
                     put("enablePlayitTunnel", s.enablePlayitTunnel)
                     put("serverType", s.serverType.name)

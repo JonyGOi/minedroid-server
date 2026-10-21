@@ -136,6 +136,18 @@ object ServerManager {
         }
     }
 
+    fun updateActiveServerBedrockDomain(domain: String) {
+        scope.launch(Dispatchers.Main) {
+            val active = getActiveConfig() ?: return@launch
+            if (active.bedrockDomain != domain) {
+                val updated = active.copy(bedrockDomain = domain)
+                appContext?.let { ctx ->
+                    updateServer(ctx, updated)
+                }
+            }
+        }
+    }
+
     fun deleteServer(context: Context, id: String) {
         if (_activeServerId.value == id && (_state.value != ServerState.STOPPED && _state.value != ServerState.ERROR)) {
             return
@@ -244,10 +256,17 @@ object ServerManager {
 
             // 3. Inicia o túnel Playit.gg nativo em paralelo se habilitado na configuração
             if (cfg.enablePlayitTunnel) {
+                PlayitManager.ensureTunnelsExist(
+                    context = context,
+                    needJava = cfg.serverType != ServerType.GEYSER_STANDALONE,
+                    needBedrock = cfg.enableGeyser || cfg.serverType == ServerType.GEYSER_STANDALONE
+                )
+
                 PlayitTunnelProcess.start(
                     context = context,
                     onLog = { playitMsg -> addLog(playitMsg) },
-                    onDomainFound = { domain -> updateActiveServerDomain(domain) }
+                    onDomainFound = { domain -> updateActiveServerDomain(domain) },
+                    onBedrockDomainFound = { bDomain -> updateActiveServerBedrockDomain(bDomain) }
                 )
             }
         }
