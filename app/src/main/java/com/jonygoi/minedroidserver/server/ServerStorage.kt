@@ -8,6 +8,18 @@ import java.io.File
 object ServerStorage {
 
     private const val FILE_NAME = "servers_registry.json"
+    private const val PREFS_NAME = "minedroid_prefs"
+    private const val KEY_ACTIVE_SERVER_ID = "active_server_id"
+
+    fun getActiveServerId(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_ACTIVE_SERVER_ID, null)
+    }
+
+    fun saveActiveServerId(context: Context, id: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_ACTIVE_SERVER_ID, id).apply()
+    }
 
     fun getServerDirectory(context: Context, serverId: String): File {
         val dir = File(File(context.filesDir, "servers"), serverId)

@@ -246,7 +246,8 @@ object PlayitManager {
                                 PlayitTunnelProcess.start(
                                     context = context,
                                     onLog = { msg -> ServerManager.addLog(msg) },
-                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                    onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
                                 )
                             } catch (e: Exception) {
                                 e.printStackTrace()
@@ -407,15 +408,81 @@ object PlayitManager {
         val savedSecret = getSavedSecretKey(context)
         if (savedSecret.isNullOrBlank()) return@withContext false
 
-        val portType = if (tunnelType.contains("bedrock", ignoreCase = true)) "udp" else "tcp"
+        val isBedrock = tunnelType.contains("bedrock", ignoreCase = true)
+        val name = if (isBedrock) "bedrock" else "java"
+        val portType = if (isBedrock) "udp" else "tcp"
 
-        // 1. Tenta criar passando TUNNEL_TYPE PORT_TYPE PORT_COUNT
-        val cmdFull = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType, portType, "1")
+        // 1. Sintaxe oficial playit-cli: tunnels create <tunnel_type> <name> <port_type> <port_count>
+        val cmdFull = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType, name, portType, "1")
         if (executePlayitCommand(cmdFull, playitDir, context)) return@withContext true
 
-        // 2. Fallback passando apenas TUNNEL_TYPE
+        // 2. Fallback
         val cmdSimple = listOf(playitBin.absolutePath, "tunnels", "create", tunnelType)
         executePlayitCommand(cmdSimple, playitDir, context)
+    }
+
+    /**
+     * Consulta túneis existentes diretamente no daemon via comando "tunnels list"
+     */
+    fun queryExistingTunnels(
+        context: Context,
+        onJavaDomain: (String) -> Unit,
+        onBedrockDomain: (String) -> Unit
+    ) {
+        val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
+        if (!playitBin.exists() || playitBin.length() == 0L) return
+        val playitDir = File(context.filesDir, "playit")
+        val savedSecret = getSavedSecretKey(context)
+        if (savedSecret.isNullOrBlank()) return
+
+        try {
+            val cmd = listOf(playitBin.absolutePath, "tunnels", "list")
+            val pb = ProcessBuilder(cmd)
+            pb.directory(playitDir)
+            pb.redirectErrorStream(true)
+            val env = pb.environment()
+            env["HOME"] = playitDir.absolutePath
+            val tmpDir = File(context.filesDir, "tmp").apply { mkdirs() }
+            env["TMPDIR"] = tmpDir.absolutePath
+            env["PATH"] = "/system/bin:/system/xbin"
+
+            val proc = pb.start()
+            val reader = BufferedReader(InputStreamReader(proc.inputStream))
+            var line: String?
+            val discoveredList = mutableListOf<Pair<Boolean, String>>()
+
+            while (reader.readLine().also { line = it } != null) {
+                val clean = line?.trim() ?: continue
+                if (clean.isBlank()) continue
+                val domain = parsePlayitDomainFromLog(clean)
+                if (domain != null) {
+                    val isBedrock = clean.contains("udp", ignoreCase = true) ||
+                                    clean.contains("bedrock", ignoreCase = true) ||
+                                    clean.contains("19132")
+                    discoveredList.add(isBedrock to domain)
+                }
+            }
+            proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+
+            if (discoveredList.isNotEmpty()) {
+                val bedrockItem = discoveredList.find { it.first }
+                val javaItem = discoveredList.find { !it.first }
+
+                if (javaItem != null) {
+                    onJavaDomain(javaItem.second)
+                }
+                if (bedrockItem != null) {
+                    onBedrockDomain(bedrockItem.second)
+                } else if (discoveredList.size >= 2 && javaItem != null) {
+                    val second = discoveredList.find { it.second != javaItem.second }
+                    if (second != null) {
+                        onBedrockDomain(second.second)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun executePlayitCommand(cmd: List<String>, playitDir: File, context: Context): Boolean {
@@ -461,6 +528,13 @@ object PlayitManager {
         if (savedSecret.isNullOrBlank()) return@withContext
 
         try {
+            // Tenta consultar túneis já existentes primeiro
+            queryExistingTunnels(
+                context = context,
+                onJavaDomain = { jDomain -> ServerManager.updateActiveServerDomain(jDomain) },
+                onBedrockDomain = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
+            )
+
             var tunnelsCreated = false
             if (needJava) {
                 val created = createTunnel(context, "minecraft-java")

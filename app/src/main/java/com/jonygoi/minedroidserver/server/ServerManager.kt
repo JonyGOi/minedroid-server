@@ -88,7 +88,13 @@ object ServerManager {
         val loaded = ServerStorage.loadServers(context)
         _servers.value = loaded
         if (loaded.isNotEmpty()) {
-            _activeServerId.value = loaded.first().id
+            val savedActiveId = ServerStorage.getActiveServerId(context)
+            if (!savedActiveId.isNullOrBlank() && loaded.any { it.id == savedActiveId }) {
+                _activeServerId.value = savedActiveId
+            } else {
+                _activeServerId.value = loaded.first().id
+                ServerStorage.saveActiveServerId(context, loaded.first().id)
+            }
         } else {
             _activeServerId.value = ""
         }
@@ -102,6 +108,9 @@ object ServerManager {
     fun selectServer(id: String) {
         if (_state.value == ServerState.STOPPED || _state.value == ServerState.ERROR) {
             _activeServerId.value = id
+            appContext?.let { ctx ->
+                ServerStorage.saveActiveServerId(ctx, id)
+            }
         }
     }
 
@@ -111,6 +120,7 @@ object ServerManager {
         _servers.value = current
         _activeServerId.value = newConfig.id
         ServerStorage.saveServers(context, current)
+        ServerStorage.saveActiveServerId(context, newConfig.id)
     }
 
     fun updateServer(context: Context, updated: ServerConfig) {
@@ -158,7 +168,9 @@ object ServerManager {
 
         _servers.value = current
         if (_activeServerId.value == id) {
-            _activeServerId.value = current.firstOrNull()?.id ?: ""
+            val nextId = current.firstOrNull()?.id ?: ""
+            _activeServerId.value = nextId
+            ServerStorage.saveActiveServerId(context, nextId)
         }
         ServerStorage.saveServers(context, current)
     }

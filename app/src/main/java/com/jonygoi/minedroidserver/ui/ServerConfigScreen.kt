@@ -191,12 +191,12 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                                     fontFamily = FontFamily.Monospace
                                 )
                             }
-                            if (currentConfig.bedrockDomain.isNotBlank() && enableGeyser) {
+                            if (enableGeyser || currentConfig.serverType == ServerType.GEYSER_STANDALONE) {
                                 Text(
                                     text = "Bedrock: ${currentConfig.friendlyBedrockAddress}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MinecraftLapis,
+                                    color = if (currentConfig.bedrockDomain.isNotBlank()) MinecraftLapis else TextSecondary,
                                     fontFamily = FontFamily.Monospace
                                 )
                             }

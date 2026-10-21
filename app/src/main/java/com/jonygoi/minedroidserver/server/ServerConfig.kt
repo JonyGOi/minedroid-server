@@ -59,7 +59,7 @@ data class ServerConfig(
             customDomain.isNotBlank() -> {
                 if (customDomain.contains(":")) customDomain else "$customDomain:$serverPort"
             }
-            enablePlayitTunnel -> "Aguardando túnel Playit.gg..."
+            enablePlayitTunnel -> "Aguardando túnel Java Playit.gg..."
             else -> "servidor.local:$serverPort"
         }
 
@@ -68,11 +68,7 @@ data class ServerConfig(
             bedrockDomain.isNotBlank() -> {
                 if (bedrockDomain.contains(":")) bedrockDomain else "$bedrockDomain:$geyserPort"
             }
-            customDomain.isNotBlank() -> {
-                val base = customDomain.split(":").first()
-                "$base:$geyserPort"
-            }
-            enablePlayitTunnel -> "Aguardando túnel Playit.gg..."
+            enablePlayitTunnel -> "Aguardando túnel Bedrock Playit.gg..."
             else -> "servidor.local:$geyserPort"
         }
 

@@ -477,7 +477,8 @@ fun ServerCreationDialog(
                                                                 PlayitTunnelProcess.start(
                                                                     context = context,
                                                                     onLog = { msg -> ServerManager.addLog(msg) },
-                                                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                                                    onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
                                                                 )
                                                                 manualSecretKey = secret
                                                                 activeClaimCode = null

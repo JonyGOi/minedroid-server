@@ -572,7 +572,7 @@ fun DashboardScreen(
                                                 )
                                             }
                                         }
-                                        if (s.bedrockDomain.isNotBlank() || s.customDomain.isNotBlank()) {
+                                        if (s.bedrockDomain.isNotBlank()) {
                                             IconButton(
                                                 onClick = { copyToClipboard(context, s.friendlyBedrockAddress) },
                                                 modifier = Modifier.size(36.dp)

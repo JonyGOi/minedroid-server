@@ -98,6 +98,8 @@ object PlayitTunnelProcess {
 
                 val discoveredTunnels = mutableSetOf<String>()
                 var initialStatusLogged = false
+                var assignedJavaDomain: String? = null
+                var assignedBedrockDomain: String? = null
 
                 while (reader.readLine().also { line = it } != null) {
                     val rawMsg = line ?: continue
@@ -134,23 +136,42 @@ object PlayitTunnelProcess {
                     // 2. Detectar linha de mapeamento de túnel (ex: xyz.tun.ply.gg => 127.0.0.1:25565 (minecraft-java))
                     val domain = PlayitManager.parsePlayitDomainFromLog(cleanMsg)
                     if (domain != null && cleanMsg.contains("=>")) {
-                        val isBedrock = cleanMsg.contains("bedrock", ignoreCase = true) || cleanMsg.contains("19132")
+                        val isBedrock = cleanMsg.contains("bedrock", ignoreCase = true) ||
+                                        cleanMsg.contains("19132") ||
+                                        cleanMsg.contains("udp", ignoreCase = true)
                         val isNew = discoveredTunnels.add(cleanMsg)
                         if (isNew) {
                             if (isBedrock) {
+                                assignedBedrockDomain = domain
                                 onLog(LogMessage("[Playit.gg] 📱 Túnel Bedrock ativo: $cleanMsg", LogType.SYSTEM))
                                 onBedrockDomainFound(domain)
                             } else {
-                                onLog(LogMessage("[Playit.gg] ☕ Túnel Java ativo: $cleanMsg", LogType.SYSTEM))
-                                onDomainFound(domain)
+                                // Se já atribuímos um domínio Java diferente e o Bedrock ainda não está definido,
+                                // o segundo túnel descoberto na conta é o Bedrock!
+                                if (assignedJavaDomain != null && assignedJavaDomain != domain && assignedBedrockDomain == null) {
+                                    assignedBedrockDomain = domain
+                                    onLog(LogMessage("[Playit.gg] 📱 Túnel Bedrock ativo (2º túnel): $cleanMsg", LogType.SYSTEM))
+                                    onBedrockDomainFound(domain)
+                                } else {
+                                    assignedJavaDomain = domain
+                                    onLog(LogMessage("[Playit.gg] ☕ Túnel Java ativo: $cleanMsg", LogType.SYSTEM))
+                                    onDomainFound(domain)
+                                }
                             }
                         }
                         continue
                     } else if (domain != null) {
                         val isNew = discoveredTunnels.add(domain)
                         if (isNew) {
-                            onLog(LogMessage("[Playit.gg] ✅ Túnel nominal ativo: $domain", LogType.SYSTEM))
-                            onDomainFound(domain)
+                            if (assignedJavaDomain == null) {
+                                assignedJavaDomain = domain
+                                onLog(LogMessage("[Playit.gg] ✅ Túnel Java nominal ativo: $domain", LogType.SYSTEM))
+                                onDomainFound(domain)
+                            } else if (assignedBedrockDomain == null && domain != assignedJavaDomain) {
+                                assignedBedrockDomain = domain
+                                onLog(LogMessage("[Playit.gg] ✅ Túnel Bedrock nominal ativo: $domain", LogType.SYSTEM))
+                                onBedrockDomainFound(domain)
+                            }
                         }
                     }
 
