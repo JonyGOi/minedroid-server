@@ -2,31 +2,31 @@ package com.jonygoi.minedroidserver.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Minecraft-inspired dark obsidian & emerald theme
-val MinecraftObsidian = Color(0xFF0F1115)
-val MinecraftDarkSurface = Color(0xFF181B20)
-val MinecraftCardSurface = Color(0xFF22262E)
-val MinecraftBorder = Color(0xFF2E3440)
+// Modern, disciplined Dark Obsidian & Emerald Palette (Material 3 Dark)
+val MinecraftObsidian = Color(0xFF0E1015)
+val MinecraftDarkSurface = Color(0xFF161920)
+val MinecraftCardSurface = Color(0xFF1E232D)
+val MinecraftBorder = Color(0xFF2A303C)
 
-val MinecraftEmerald = Color(0xFF2ECC71)
-val MinecraftEmeraldDark = Color(0xFF27AE60)
+val MinecraftEmerald = Color(0xFF10B981)
+val MinecraftEmeraldDark = Color(0xFF059669)
 val MinecraftCreeperGreen = Color(0xFF10B981)
 
-val MinecraftRedstone = Color(0xFFE74C3C)
-val MinecraftRedstoneDark = Color(0xFFC0392B)
+val MinecraftRedstone = Color(0xFFEF4444)
+val MinecraftRedstoneDark = Color(0xFFDC2626)
 
-val MinecraftLapis = Color(0xFF3498DB)
-val MinecraftGold = Color(0xFFF39C12)
-val MinecraftDiamond = Color(0xFF00D2D3)
+val MinecraftLapis = Color(0xFF0EA5E9)
+val MinecraftGold = Color(0xFFF59E0B)
+val MinecraftDiamond = Color(0xFF06B6D4)
 
-val TextPrimary = Color(0xFFF1F2F6)
-val TextSecondary = Color(0xFFA4B0BE)
-val TextMuted = Color(0xFF747D8C)
+val TextPrimary = Color(0xFFF8FAFC)
+val TextSecondary = Color(0xFF94A3B8)
+val TextMuted = Color(0xFF64748B)
 
 // Console colors
-val ConsoleBg = Color(0xFF0B0D10)
-val ConsoleGreen = Color(0xFF2ED573)
-val ConsoleYellow = Color(0xFFFFA502)
-val ConsoleRed = Color(0xFFFF4757)
-val ConsoleCyan = Color(0xFF70A1FF)
-val ConsoleGray = Color(0xFF747D8C)
+val ConsoleBg = Color(0xFF0A0C10)
+val ConsoleGreen = Color(0xFF10B981)
+val ConsoleYellow = Color(0xFFF59E0B)
+val ConsoleRed = Color(0xFFEF4444)
+val ConsoleCyan = Color(0xFF0EA5E9)
+val ConsoleGray = Color(0xFF64748B)

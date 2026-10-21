@@ -3,9 +3,11 @@ package com.jonygoi.minedroidserver.ui
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,7 +46,6 @@ fun ServerCreationDialog(
     var versionExpanded by remember { mutableStateOf(false) }
 
     var enablePlayit by remember { mutableStateOf(true) }
-    var customDomain by remember { mutableStateOf("") }
     var claimLoading by remember { mutableStateOf(false) }
     var activeClaimCode by remember { mutableStateOf<String?>(null) }
     var activeClaimUrl by remember { mutableStateOf<String?>(null) }
@@ -57,14 +58,16 @@ fun ServerCreationDialog(
     var onlineMode by remember { mutableStateOf(false) } // false = Pirata + Original
     var viewDistance by remember { mutableFloatStateOf(6f) }
 
+    val quickVersions = remember { listOf("1.21.1", "1.21.4", "1.20.4", "1.16.5") }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+            border = BorderStroke(1.dp, MinecraftBorder),
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(0.92f)
-                .border(1.dp, MinecraftBorder, RoundedCornerShape(16.dp))
         ) {
             Column(
                 modifier = Modifier
@@ -77,7 +80,7 @@ fun ServerCreationDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Criar Novo Servidor",
                             fontSize = 20.sp,
@@ -91,8 +94,15 @@ fun ServerCreationDialog(
                         )
                     }
 
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextMuted)
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Fechar",
+                            tint = TextMuted
+                        )
                     }
                 }
 
@@ -115,95 +125,123 @@ fun ServerCreationDialog(
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MinecraftEmerald,
-                            unfocusedBorderColor = MinecraftBorder
+                            unfocusedBorderColor = MinecraftBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedLabelColor = MinecraftEmerald,
+                            unfocusedLabelColor = TextSecondary
                         )
                     )
 
-                    // 2. Motor do Servidor
-                    Column {
+                    // 2. Motor do Servidor (Software)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "Motor do Servidor (Software)",
+                            text = "Motor do Servidor",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MinecraftEmerald
+                            color = TextPrimary
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        ServerType.values().forEach { type ->
+
+                        listOf(
+                            ServerType.PAPER to "PaperMC (Recomendado com Mundo)",
+                            ServerType.PURPUR to "Purpur (Ultra Otimizado)",
+                            ServerType.VANILLA to "Vanilla (Oficial Mojang)",
+                            ServerType.FABRIC to "Fabric (Modded)",
+                            ServerType.GEYSER_STANDALONE to "GeyserMC Proxy (Apenas Ponte)"
+                        ).forEach { (type, label) ->
                             val isSel = selectedType == type
-                            val isRecommended = type == ServerType.PAPER
-                            val isProxyOnly = type == ServerType.GEYSER_STANDALONE
-                            Row(
+                            Surface(
+                                color = if (isSel) MinecraftCardSurface else MinecraftDarkSurface,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (isSel) MinecraftEmerald else MinecraftBorder),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(
-                                        if (isSel) MinecraftCardSurface else MinecraftObsidian,
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .border(
-                                        1.dp,
-                                        if (isSel) MinecraftEmerald else if (isRecommended) MinecraftEmerald.copy(alpha = 0.5f) else MinecraftBorder,
-                                        RoundedCornerShape(8.dp)
-                                    )
                                     .clickable { selectedType = type }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(
-                                    selected = isSel,
-                                    onClick = { selectedType = type },
-                                    colors = RadioButtonDefaults.colors(selectedColor = MinecraftEmerald)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = type.displayName,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = when {
-                                                isRecommended -> MinecraftEmerald
-                                                isProxyOnly -> TextMuted
-                                                else -> TextPrimary
-                                            }
-                                        )
-                                        if (isRecommended) {
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                color = MinecraftEmerald.copy(alpha = 0.2f),
-                                                shape = RoundedCornerShape(4.dp)
-                                            ) {
-                                                Text(
-                                                    text = "RECOMENDADO",
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MinecraftEmerald,
-                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                                )
-                                            }
-                                        }
-                                    }
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = isSel,
+                                        onClick = { selectedType = type },
+                                        colors = RadioButtonDefaults.colors(selectedColor = MinecraftEmerald),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
                                     Text(
-                                        text = type.category,
-                                        fontSize = 11.sp,
-                                        color = if (isProxyOnly) MinecraftGold else TextSecondary
+                                        text = label,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSel) TextPrimary else TextSecondary
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+
+                        if (selectedType == ServerType.GEYSER_STANDALONE) {
+                            Surface(
+                                color = MinecraftGold.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, MinecraftGold.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(
+                                        Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MinecraftGold,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Aviso: GeyserMC Standalone é apenas uma ponte/proxy. Ele NÃO cria um mundo próprio. Para jogar survival no celular e PC, selecione PaperMC.",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    // 3. Versão do Minecraft (Dropdown completo)
+                    // 3. Versão do Minecraft
                     if (selectedType != ServerType.GEYSER_STANDALONE) {
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
                                 text = "Versão do Minecraft",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
 
+                            // Quick version chips
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                quickVersions.forEach { ver ->
+                                    val isSel = selectedVersion == ver
+                                    FilterChip(
+                                        selected = isSel,
+                                        onClick = { selectedVersion = ver },
+                                        label = { Text(ver, fontSize = 12.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MinecraftEmerald.copy(alpha = 0.2f),
+                                            selectedLabelColor = MinecraftEmerald
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            borderColor = if (isSel) MinecraftEmerald else MinecraftBorder,
+                                            enabled = true,
+                                            selected = isSel
+                                        )
+                                    )
+                                }
+                            }
+
+                            // Full dropdown selector
                             ExposedDropdownMenuBox(
                                 expanded = versionExpanded,
                                 onExpandedChange = { versionExpanded = !versionExpanded }
@@ -212,12 +250,16 @@ fun ServerCreationDialog(
                                     value = selectedVersion,
                                     onValueChange = {},
                                     readOnly = true,
-                                    label = { Text("Versão Selecionada") },
+                                    label = { Text("Todas as Versões") },
                                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = versionExpanded) },
-                                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                    modifier = Modifier
+                                        .menuAnchor()
+                                        .fillMaxWidth(),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = MinecraftEmerald,
-                                        unfocusedBorderColor = MinecraftBorder
+                                        unfocusedBorderColor = MinecraftBorder,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary
                                     )
                                 )
                                 ExposedDropdownMenu(
@@ -239,13 +281,17 @@ fun ServerCreationDialog(
                         }
                     }
 
-                    // 4. Integração Playit.gg (Túnel & Domínio Real)
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MinecraftCardSurface),
+                    // 4. Integração Playit.gg
+                    Surface(
+                        color = MinecraftCardSurface,
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftDiamond.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        border = BorderStroke(1.dp, MinecraftLapis.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -256,10 +302,10 @@ fun ServerCreationDialog(
                                         text = "Túnel Automático Playit.gg",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = MinecraftDiamond
+                                        color = MinecraftLapis
                                     )
                                     Text(
-                                        text = "Cria um endereço nominal grátis (ex: joao.gl.joinmc.link) para jogar pela internet sem abrir portas.",
+                                        text = "Gera um link permanente (ex: servidor.gl.joinmc.link) para jogar online.",
                                         fontSize = 11.sp,
                                         color = TextSecondary
                                     )
@@ -269,7 +315,7 @@ fun ServerCreationDialog(
                                     onCheckedChange = { enablePlayit = it },
                                     colors = SwitchDefaults.colors(
                                         checkedThumbColor = MinecraftObsidian,
-                                        checkedTrackColor = MinecraftDiamond
+                                        checkedTrackColor = MinecraftLapis
                                     )
                                 )
                             }
@@ -285,7 +331,12 @@ fun ServerCreationDialog(
                                             modifier = Modifier.padding(8.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftEmerald, modifier = Modifier.size(16.dp))
+                                            Icon(
+                                                Icons.Default.Dns,
+                                                contentDescription = null,
+                                                tint = MinecraftEmerald,
+                                                modifier = Modifier.size(16.dp)
+                                            )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
                                                 text = "Chave Playit.gg salva e ativa!",
@@ -309,13 +360,19 @@ fun ServerCreationDialog(
                                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(session.claimUrl))
                                                 context.startActivity(intent)
                                             } else {
-                                                Toast.makeText(context, "Não foi possível abrir sessão automática. Use a caixa de texto abaixo para colar sua Secret Key.", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(
+                                                    context,
+                                                    "Não foi possível abrir sessão automática. Use a caixa de texto abaixo para colar sua Secret Key.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
                                             }
                                         }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftDiamond),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftLapis),
                                     shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
                                 ) {
                                     Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftObsidian)
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -329,14 +386,14 @@ fun ServerCreationDialog(
 
                                 activeClaimCode?.let { code ->
                                     DisposableEffect(code) {
-                                        claimLiveStatus = "Agente registrado! Aguardando autorização no navegador..."
+                                        claimLiveStatus = "Aguardando autorização no navegador..."
                                         PlayitManager.startBackgroundClaimPoller(code, context) { status, secret ->
                                             when (status) {
                                                 PlayitClaimStatus.WAITING_FOR_BROWSER -> {
                                                     claimLiveStatus = "Aguardando página abrir no navegador..."
                                                 }
                                                 PlayitClaimStatus.WAITING_FOR_USER_CLICK -> {
-                                                    claimLiveStatus = "Agente detectado! Clique em 'Add Agent' na página..."
+                                                    claimLiveStatus = "Clique em 'Add Agent' na página..."
                                                 }
                                                 PlayitClaimStatus.ACCEPTED -> {
                                                     claimLiveStatus = "Autorizado com sucesso! Conectando agente..."
@@ -345,7 +402,7 @@ fun ServerCreationDialog(
                                                         activeClaimCode = null
                                                         activeClaimUrl = null
                                                         try {
-                                                            Toast.makeText(context, "Conta Playit.gg vinculada com sucesso! Agente conectado.", Toast.LENGTH_LONG).show()
+                                                            Toast.makeText(context, "Playit.gg vinculado com sucesso!", Toast.LENGTH_LONG).show()
                                                         } catch (_: Exception) {}
                                                     }
                                                 }
@@ -363,19 +420,28 @@ fun ServerCreationDialog(
                                     Surface(
                                         color = MinecraftDarkSurface,
                                         shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftDiamond.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        border = BorderStroke(1.dp, MinecraftLapis.copy(alpha = 0.5f)),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Column(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MinecraftDiamond, strokeWidth = 2.dp)
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(16.dp),
+                                                    color = MinecraftLapis,
+                                                    strokeWidth = 2.dp
+                                                )
                                                 Spacer(modifier = Modifier.width(8.dp))
-                                                Text(claimLiveStatus, color = MinecraftDiamond, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                                Text(
+                                                    claimLiveStatus,
+                                                    color = MinecraftLapis,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
                                             }
-                                            Text(
-                                                text = "O app está mantendo conexão constante com o site. Quando você clicar em 'Add Agent' na página, ele autorizará sozinho e conectará o agente!",
-                                                fontSize = 10.sp,
-                                                color = TextSecondary
-                                            )
+
                                             Button(
                                                 onClick = {
                                                     coroutineScope.launch {
@@ -393,9 +459,9 @@ fun ServerCreationDialog(
                                                                 manualSecretKey = secret
                                                                 activeClaimCode = null
                                                                 activeClaimUrl = null
-                                                                Toast.makeText(context, "Conta Playit.gg vinculada! Agente conectado.", Toast.LENGTH_LONG).show()
+                                                                Toast.makeText(context, "Playit.gg vinculado com sucesso!", Toast.LENGTH_LONG).show()
                                                             } else {
-                                                                Toast.makeText(context, "Ainda não confirmado no navegador. Clique em 'Add Agent' na página primeiro.", Toast.LENGTH_SHORT).show()
+                                                                Toast.makeText(context, "Ainda não confirmado. Clique em 'Add Agent' na página.", Toast.LENGTH_SHORT).show()
                                                             }
                                                         } catch (e: Exception) {
                                                             claimLoading = false
@@ -405,34 +471,21 @@ fun ServerCreationDialog(
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
                                                 shape = RoundedCornerShape(6.dp),
-                                                modifier = Modifier.fillMaxWidth()
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(44.dp)
                                             ) {
-                                                Text("JÁ CLIQUEI EM 'ADD AGENT' (CONFIRMAR)", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                            }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    val url = activeClaimUrl ?: "https://playit.gg/claim/$code"
-                                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                                    context.startActivity(intent)
-                                                },
-                                                shape = RoundedCornerShape(6.dp),
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Text("Reabrir Página no Navegador", fontSize = 10.sp, color = MinecraftDiamond)
+                                                Text(
+                                                    "CONFIRMAR VINCULAÇÃO",
+                                                    color = MinecraftObsidian,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
                                             }
                                         }
                                     }
                                 }
 
-                                activeClaimUrl?.let { url ->
-                                    Text(
-                                        text = "Link de autorização: $url",
-                                        fontSize = 10.sp,
-                                        color = MinecraftGold
-                                    )
-                                }
-
-                                // Campo para inserir ou colar chave secreta manualmente
                                 OutlinedTextField(
                                     value = manualSecretKey,
                                     onValueChange = {
@@ -441,14 +494,14 @@ fun ServerCreationDialog(
                                             PlayitManager.saveSecretKey(context, manualSecretKey)
                                         }
                                     },
-                                    label = { Text("Ou cole a Secret Key do Playit (Opcional)", fontSize = 11.sp) },
+                                    label = { Text("Secret Key Playit (Opcional)", fontSize = 11.sp) },
                                     placeholder = { Text("Ex: 1a2b3c4d5e...", fontSize = 11.sp) },
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = MinecraftDiamond,
+                                        focusedBorderColor = MinecraftLapis,
                                         unfocusedBorderColor = MinecraftBorder,
                                         focusedTextColor = TextPrimary,
                                         unfocusedTextColor = TextPrimary,
-                                        focusedLabelColor = MinecraftDiamond,
+                                        focusedLabelColor = MinecraftLapis,
                                         unfocusedLabelColor = TextSecondary
                                     ),
                                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp),
@@ -459,14 +512,15 @@ fun ServerCreationDialog(
                         }
                     }
 
-                    // 5. Crossplay GeyserMC (Apenas para motores com suporte a Spigot: Paper e Purpur)
+                    // 5. Crossplay GeyserMC + Floodgate (Paper ou Purpur)
                     if (selectedType == ServerType.PAPER || selectedType == ServerType.PURPUR) {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MinecraftCardSurface),
+                        Surface(
+                            color = MinecraftCardSurface,
                             shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, MinecraftBorder),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(modifier = Modifier.padding(14.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -475,12 +529,12 @@ fun ServerCreationDialog(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = "Crossplay GeyserMC + Floodgate",
-                                            fontSize = 13.sp,
+                                            fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MinecraftLapis
                                         )
                                         Text(
-                                            text = "Permite celulares, consoles e Win10 no servidor Java.",
+                                            text = "Permite celulares (Bedrock) e PC (Java) jogarem juntos.",
                                             fontSize = 11.sp,
                                             color = TextSecondary
                                         )
@@ -496,61 +550,16 @@ fun ServerCreationDialog(
                                 }
                             }
                         }
-                    } else if (selectedType == ServerType.VANILLA) {
-                        Surface(
-                            color = MinecraftCardSurface.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftBorder, RoundedCornerShape(8.dp))
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text(
-                                    text = "Vanilla Oficial da Mojang",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "Versão oficial pura da Mojang. Não possui sistema de plugins Spigot.",
-                                    fontSize = 11.sp,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
-                    } else if (selectedType == ServerType.GEYSER_STANDALONE) {
-                        Surface(
-                            color = MinecraftCardSurface.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().border(1.dp, MinecraftGold.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Warning, contentDescription = null, tint = MinecraftGold, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Aviso: Apenas Proxy (NÃO cria mundo)",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MinecraftGold
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "O GeyserMC Standalone NÃO é um jogo de Minecraft e NÃO gera terreno, blocos ou criaturas. Ele serve apenas como 'ponte' para conectar jogadores Bedrock (celular) a outro servidor Java que já esteja rodando em outro local.\n\n👉 Para criar seu mundo completo com suporte a celular (Bedrock) e PC (Java), selecione PaperMC acima!",
-                                    fontSize = 11.sp,
-                                    color = TextSecondary
-                                )
-                            }
-                        }
                     }
 
                     // 6. Alocação de Memória RAM
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Alocação de RAM",
+                                text = "Alocação de Memória RAM",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
@@ -577,32 +586,41 @@ fun ServerCreationDialog(
 
                     // 7. Modo Pirata
                     if (selectedType.isJava) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            color = MinecraftCardSurface,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, MinecraftBorder),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Modo Pirata + Original",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextPrimary
-                                )
-                                Text(
-                                    text = "Permite contas não-oficiais (TLauncher, Pojav, etc.)",
-                                    fontSize = 11.sp,
-                                    color = TextMuted
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Modo Pirata + Original",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "Permite contas não-oficiais (TLauncher, PojavLauncher, etc.)",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                                Switch(
+                                    checked = !onlineMode,
+                                    onCheckedChange = { onlineMode = !it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MinecraftObsidian,
+                                        checkedTrackColor = MinecraftEmerald
+                                    )
                                 )
                             }
-                            Switch(
-                                checked = !onlineMode,
-                                onCheckedChange = { onlineMode = !it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MinecraftObsidian,
-                                    checkedTrackColor = MinecraftEmerald
-                                )
-                            )
                         }
                     }
                 }
@@ -615,7 +633,7 @@ fun ServerCreationDialog(
                         val newServer = ServerConfig(
                             id = UUID.randomUUID().toString(),
                             name = name.ifBlank { "Servidor Minecraft" },
-                            customDomain = customDomain,
+                            customDomain = "",
                             enablePlayitTunnel = enablePlayit,
                             serverType = selectedType,
                             version = selectedVersion,
@@ -629,15 +647,22 @@ fun ServerCreationDialog(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(10.dp)
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        tint = MinecraftObsidian,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         "CRIAR SERVIDOR",
                         fontWeight = FontWeight.Bold,
                         color = MinecraftObsidian,
-                        fontSize = 15.sp
+                        fontSize = 14.sp
                     )
                 }
             }

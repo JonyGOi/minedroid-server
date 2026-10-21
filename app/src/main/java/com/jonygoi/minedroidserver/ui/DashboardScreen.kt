@@ -46,6 +46,7 @@ fun DashboardScreen(
     val downloadProg by ServerManager.downloadProgress.collectAsState()
     val logs by ServerManager.logs.collectAsState()
     val liveClaimUrl by PlayitManager.liveClaimUrl.collectAsState()
+    val isPlayitRunning by PlayitTunnelProcess.isRunningFlow.collectAsState()
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var serverToDelete by remember { mutableStateOf<ServerConfig?>(null) }
@@ -57,7 +58,11 @@ fun DashboardScreen(
     val activeConfig = remember(servers, activeServerId) {
         servers.find { it.id == activeServerId } ?: servers.firstOrNull()
     }
+    val savedSecret = remember(playitSessionToConfirm, isPlayitRunning) { PlayitManager.getSavedSecretKey(context) }
+    val isRunning = state == ServerState.RUNNING
+    val isStarting = state == ServerState.STARTING || state == ServerState.PREPARING || state == ServerState.DOWNLOADING
 
+    // Dialog: Criar Novo Servidor
     if (showCreateDialog) {
         ServerCreationDialog(
             onDismiss = { showCreateDialog = false },
@@ -69,12 +74,12 @@ fun DashboardScreen(
         )
     }
 
-    // Delete confirmation dialog
+    // Dialog: Excluir Servidor
     serverToDelete?.let { s ->
         AlertDialog(
             onDismissRequest = { serverToDelete = null },
             title = { Text("Excluir Servidor") },
-            text = { Text("Deseja realmente apagar o servidor '${s.name}'? Todos os arquivos do mundo e configurações serão excluídos permanentemente.") },
+            text = { Text("Deseja realmente apagar '${s.name}'? Todos os arquivos do mundo e configurações serão excluídos.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -97,7 +102,7 @@ fun DashboardScreen(
         )
     }
 
-    // Playit Confirmation Dialog with real-time polling
+    // Dialog: Vinculação Playit.gg
     playitSessionToConfirm?.let { session ->
         var hasAutoOpenedBrowser by remember { mutableStateOf(false) }
 
@@ -119,15 +124,12 @@ fun DashboardScreen(
                                 PlayitTunnelProcess.start(
                                     context = context,
                                     onLog = { msg -> ServerManager.addLog(msg) },
-                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                    onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
                                 )
                                 playitSessionToConfirm = null
                                 try {
-                                    Toast.makeText(
-                                        context,
-                                        "Conta Playit.gg vinculada com sucesso! Agente conectado.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
+                                    Toast.makeText(context, "Conta Playit.gg vinculada com sucesso!", Toast.LENGTH_LONG).show()
                                 } catch (_: Exception) {}
                             }
                         }
@@ -148,18 +150,18 @@ fun DashboardScreen(
             }
         }
 
-        val liveClaim = liveClaimUrl ?: session.claimUrl.ifBlank { null }
-
-        LaunchedEffect(liveClaim) {
-            if (!liveClaim.isNullOrBlank() && !hasAutoOpenedBrowser) {
+        LaunchedEffect(session.claimUrl, liveClaimUrl) {
+            val urlToOpen = if (!liveClaimUrl.isNullOrBlank()) liveClaimUrl else session.claimUrl
+            if (!urlToOpen.isNullOrBlank() && !hasAutoOpenedBrowser) {
                 hasAutoOpenedBrowser = true
                 try {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(liveClaim))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(urlToOpen)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
                     context.startActivity(intent)
                 } catch (_: Exception) {}
             }
         }
-        val playitLogs = logs.filter { it.text.contains("[Playit.gg]") }.takeLast(8)
 
         AlertDialog(
             onDismissRequest = { playitSessionToConfirm = null },
@@ -167,11 +169,38 @@ fun DashboardScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Instalação do Agente Playit.gg")
+                    Text("Vincular Playit.gg", fontWeight = FontWeight.Bold)
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Abra a página do Playit.gg e clique em 'Add Agent' para autorizar o túnel deste celular:",
+                        fontSize = 13.sp,
+                        color = TextSecondary
+                    )
+
+                    val targetUrl = if (!liveClaimUrl.isNullOrBlank()) liveClaimUrl!! else session.claimUrl
+                    if (targetUrl.isNotBlank()) {
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MinecraftDiamond),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.OpenInBrowser, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("ABRIR PÁGINA DO PLAYIT", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+
                     Surface(
                         color = MinecraftCardSurface,
                         shape = RoundedCornerShape(8.dp),
@@ -181,176 +210,59 @@ fun DashboardScreen(
                             modifier = Modifier.padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = MinecraftDiamond,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = if (activeConfig?.customDomain?.isNotBlank() == true) {
-                                    "✅ Agente conectado! Túnel ativo."
-                                } else if (!liveClaim.isNullOrBlank()) {
-                                    "Aguardando autorização no navegador..."
-                                } else {
-                                    "Iniciando agente Playit.gg nativo..."
-                                },
-                                color = MinecraftDiamond,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), color = MinecraftEmerald, strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = playitLiveStatus, fontSize = 11.sp, color = TextPrimary)
                         }
                     }
 
-                    // Terminal Box Visual Interativo
-                    Surface(
-                        color = MinecraftObsidian,
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, MinecraftBorder),
-                        modifier = Modifier.fillMaxWidth().height(130.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(8.dp).verticalScroll(rememberScrollState())
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Terminal, contentDescription = null, tint = MinecraftEmerald, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Terminal do Agente (Ao Vivo)", color = MinecraftEmerald, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            if (playitLogs.isEmpty()) {
-                                Text("Executando motor nativo Playit...", color = TextSecondary, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
-                            } else {
-                                playitLogs.forEach { log ->
-                                    Text(
-                                        text = log.text,
-                                        color = when (log.type) {
-                                            LogType.ERROR -> MinecraftRedstone
-                                            LogType.WARN -> MinecraftGold
-                                            LogType.SYSTEM -> MinecraftDiamond
-                                            else -> TextSecondary
-                                        },
-                                        fontSize = 10.sp,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
 
-                    // Botão Direto para o Link de Claim
-                    if (!liveClaim.isNullOrBlank()) {
-                        Button(
-                            onClick = {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(liveClaim))
-                                context.startActivity(intent)
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MinecraftDiamond),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("ABRIR PÁGINA E ADICIONAR AGENTE", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                        }
-                    }
-
-                    // Redefinir Agente (caso chave anterior esteja corrompida)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = {
-                                PlayitTunnelProcess.stop()
-                                PlayitManager.resetSecret(context)
-                                Toast.makeText(context, "Chave apagada! Reiniciando agente...", Toast.LENGTH_SHORT).show()
-                                PlayitTunnelProcess.start(
-                                    context = context,
-                                    onLog = { msg -> ServerManager.addLog(msg) },
-                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
-                                )
-                            }
-                        ) {
-                            Text("Limpar Chave / Resetar", color = MinecraftRedstone, fontSize = 11.sp)
-                        }
-                    }
-
-                    HorizontalDivider(color = MinecraftBorder)
-
-                    Text(
-                        "Ou se já possui a Secret Key, cole abaixo:",
-                        color = TextSecondary,
-                        fontSize = 11.sp
-                    )
-
+                    Text("Ou cole sua Secret Key manualmente:", fontSize = 11.sp, color = TextSecondary)
                     OutlinedTextField(
                         value = manualPlayitInput,
-                        onValueChange = { manualPlayitInput = it.trim() },
-                        placeholder = { Text("Cole sua Secret Key aqui...", fontSize = 11.sp) },
+                        onValueChange = { manualPlayitInput = it },
+                        placeholder = { Text("Chave secreta do playit.toml") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MinecraftEmerald,
-                            unfocusedBorderColor = MinecraftBorder,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary
-                        ),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                            unfocusedBorderColor = MinecraftBorder
+                        )
                     )
-
-                    if (manualPlayitInput.isNotBlank()) {
-                        Button(
-                            onClick = {
-                                PlayitManager.saveSecretKey(context, manualPlayitInput)
-                                PlayitTunnelProcess.stop()
-                                PlayitTunnelProcess.start(
-                                    context = context,
-                                    onLog = { msg -> ServerManager.addLog(msg) },
-                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
-                                )
-                                playitSessionToConfirm = null
-                                Toast.makeText(context, "Secret Key salva! Agente conectando ao Playit.gg...", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Salvar Chave Manual", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                        }
-                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        coroutineScope.launch {
-                            try {
-                                isExchangingPlayit = true
-                                val secret = if (session.code.isNotBlank()) PlayitManager.exchangeClaim(session.code) else null
+                        if (manualPlayitInput.isNotBlank()) {
+                            PlayitManager.saveSecretKey(context, manualPlayitInput.trim())
+                            PlayitTunnelProcess.start(
+                                context = context,
+                                onLog = { msg -> ServerManager.addLog(msg) },
+                                onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
+                            )
+                            playitSessionToConfirm = null
+                            Toast.makeText(context, "Chave salva com sucesso!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            isExchangingPlayit = true
+                            coroutineScope.launch {
+                                val secret = PlayitManager.exchangeClaim(session.code)
                                 isExchangingPlayit = false
                                 if (!secret.isNullOrBlank()) {
                                     PlayitManager.saveSecretKey(context, secret)
                                     PlayitTunnelProcess.start(
                                         context = context,
                                         onLog = { msg -> ServerManager.addLog(msg) },
-                                        onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
+                                        onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                        onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
                                     )
                                     playitSessionToConfirm = null
-                                    Toast.makeText(context, "Conta Playit.gg vinculada! Agente conectado.", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "Conectado ao Playit.gg com sucesso!", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    val saved = PlayitManager.getSavedSecretKey(context)
-                                    val fileSecret = PlayitManager.findSecretInConfigFiles(context)
-
-                                    if (!saved.isNullOrBlank() || !fileSecret.isNullOrBlank() || activeConfig?.customDomain?.isNotBlank() == true) {
-                                        playitSessionToConfirm = null
-                                        Toast.makeText(context, "Agente ativo e conectado com sucesso!", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        Toast.makeText(context, "Ainda aguardando autorização no site. Clique em 'Add Agent' na página.", Toast.LENGTH_SHORT).show()
-                                    }
+                                    Toast.makeText(context, "Ainda aguardando autorização no site...", Toast.LENGTH_SHORT).show()
                                 }
-                            } catch (e: Exception) {
-                                isExchangingPlayit = false
-                                Toast.makeText(context, "Erro ao confirmar: ${e.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -360,7 +272,7 @@ fun DashboardScreen(
                     if (isExchangingPlayit) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MinecraftObsidian, strokeWidth = 2.dp)
                     } else {
-                        Text("JÁ AUTORIZEI NO SITE", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text("CONFIRMAR", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             },
@@ -375,6 +287,7 @@ fun DashboardScreen(
         )
     }
 
+    // Main Scaffold Layout
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -383,7 +296,7 @@ fun DashboardScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Top Header
+        // App Top Bar: Clean title & primary add action
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -392,13 +305,13 @@ fun DashboardScreen(
             Column {
                 Text(
                     text = "MineDroid Server",
-                    fontSize = 24.sp,
+                    fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
                 Text(
-                    text = "Hospedagem de Minecraft no Celular",
-                    fontSize = 13.sp,
+                    text = if (servers.isEmpty()) "Nenhum servidor configurado" else "${servers.size} servidor(es) cadastrado(s)",
+                    fontSize = 12.sp,
                     color = TextSecondary
                 )
             }
@@ -407,597 +320,21 @@ fun DashboardScreen(
                 onClick = { showCreateDialog = true },
                 colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
                 shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text("Novo Servidor", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
 
-        // Active Server Download Progress
+        // Active Download / Preparation Bar
         if (state == ServerState.DOWNLOADING || state == ServerState.PREPARING) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MinecraftCardSurface),
+            Surface(
+                color = MinecraftDarkSurface,
                 shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, MinecraftBorder),
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = downloadProg.first.ifEmpty { "Preparando ambiente..." },
-                        color = MinecraftEmerald,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { downloadProg.second },
-                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-                        color = MinecraftEmerald,
-                        trackColor = MinecraftDarkSurface
-                    )
-                }
-            }
-        }
-
-        // Empty State: quando não há servidores criados
-        if (servers.isEmpty()) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp)
-                    .border(1.dp, MinecraftBorder, RoundedCornerShape(16.dp))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .background(MinecraftCardSurface, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Dns,
-                            contentDescription = null,
-                            tint = MinecraftEmerald,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-
-                    Text(
-                        text = "Nenhum Servidor Criado",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-
-                    Text(
-                        text = "O app inicia 100% limpo sem servidores pré-configurados. Toque no botão abaixo para criar o seu servidor do jeito que você quiser!",
-                        fontSize = 13.sp,
-                        color = TextSecondary,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Button(
-                        onClick = { showCreateDialog = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(48.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = MinecraftObsidian)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "CRIAR MEU PRIMEIRO SERVIDOR",
-                            color = MinecraftObsidian,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            }
-        } else {
-            // Section: Lista de Servidores
-            Text(
-                text = "Meus Servidores (${servers.size})",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-
-            servers.forEach { s ->
-                val isActive = s.id == activeServerId
-                val isServerRunning = isActive && (state == ServerState.RUNNING || state == ServerState.STARTING || state == ServerState.PREPARING || state == ServerState.DOWNLOADING)
-
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isActive) MinecraftDarkSurface else MinecraftObsidian
-                    ),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            1.5.dp,
-                            if (isServerRunning) MinecraftEmerald else if (isActive) MinecraftLapis else MinecraftBorder,
-                            RoundedCornerShape(14.dp)
-                        )
-                        .clickable {
-                            if (!isServerRunning) {
-                                ServerManager.selectServer(s.id)
-                            }
-                        }
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        // Header of Card
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = s.name,
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isServerRunning) MinecraftEmerald else TextPrimary
-                                )
-                                Text(
-                                    text = "${s.serverType.displayName} ${if (s.serverType != ServerType.GEYSER_STANDALONE) s.version else ""} • ${s.allocatedRamMb}MB RAM",
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
-                                )
-                            }
-
-                            // Badge
-                            StateBadge(state = if (isActive) state else ServerState.STOPPED)
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Friendly Domain Addresses (Real Domains, not just raw IPs!)
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MinecraftCardSurface, RoundedCornerShape(10.dp))
-                                .padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            // Java Address (se não for Geyser Standalone puro)
-                            if (s.serverType != ServerType.GEYSER_STANDALONE) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Endereço Java (PC / Pojav):",
-                                            fontSize = 10.sp,
-                                            color = MinecraftEmerald,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = s.friendlyJavaAddress,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = TextPrimary,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                    }
-                                    if (s.customDomain.isNotBlank()) {
-                                        IconButton(
-                                            onClick = { copyToClipboard(context, s.friendlyJavaAddress) },
-                                            modifier = Modifier.size(32.dp)
-                                        ) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (s.enableGeyser || s.serverType == ServerType.GEYSER_STANDALONE) {
-                                if (s.serverType != ServerType.GEYSER_STANDALONE) {
-                                    HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
-                                }
-                                // Bedrock Address
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Endereço Bedrock (Celular / Console):",
-                                            fontSize = 10.sp,
-                                            color = MinecraftLapis,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = s.friendlyBedrockAddress,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = TextPrimary,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                    }
-                                    if (s.customDomain.isNotBlank()) {
-                                        IconButton(
-                                            onClick = { copyToClipboard(context, s.friendlyBedrockAddress) },
-                                            modifier = Modifier.size(32.dp)
-                                        ) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Playit Claim Helper if domain not yet resolved
-                            if (s.enablePlayitTunnel && s.customDomain.isBlank()) {
-                                TextButton(
-                                    onClick = {
-                                        // Inicia o agente nativo imediatamente para estar online
-                                        PlayitTunnelProcess.start(
-                                            context = context,
-                                            onLog = { msg -> ServerManager.addLog(msg) },
-                                            onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) }
-                                        )
-                                        playitSessionToConfirm = PlayitClaimSession(code = "", claimUrl = "")
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Instalar / Vincular Playit.gg (Visual)", color = MinecraftDiamond, fontSize = 11.sp)
-                                }
-                            }
-                        }
-
-                        if (s.serverType == ServerType.GEYSER_STANDALONE) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = MinecraftObsidian),
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, MinecraftGold.copy(alpha = 0.6f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Info, contentDescription = null, tint = MinecraftGold, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "Apenas Proxy (Sem Mundo Próprio)",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MinecraftGold
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "Geyser Standalone é uma ponte para outro servidor e não gera terreno nem blocos. Para criar um mundo completo e jogar com amigos:",
-                                        fontSize = 11.sp,
-                                        color = TextSecondary
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Button(
-                                        onClick = {
-                                            val updated = s.copy(serverType = ServerType.PAPER, enableGeyser = true, enableFloodgate = true)
-                                            ServerManager.updateServer(context, updated)
-                                            Toast.makeText(context, "Convertido para PaperMC com Crossplay! Inicie o servidor.", Toast.LENGTH_LONG).show()
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                                        shape = RoundedCornerShape(6.dp),
-                                        modifier = Modifier.fillMaxWidth().height(36.dp)
-                                    ) {
-                                        Text(
-                                            text = "Converter para PaperMC (Mundo + Crossplay) ⭐",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MinecraftObsidian
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Action buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (isServerRunning) {
-                                Button(
-                                    onClick = { ServerManager.stopServer(context) },
-                                    modifier = Modifier.weight(1f).height(44.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftRedstone),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.Stop, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("PARAR", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                }
-                            } else {
-                                Button(
-                                    onClick = { ServerManager.startServer(context, s.id) },
-                                    modifier = Modifier.weight(1f).height(44.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("INICIAR", fontWeight = FontWeight.Bold, color = MinecraftObsidian, fontSize = 13.sp)
-                                }
-                            }
-
-                            // Terminal Button
-                            OutlinedButton(
-                                onClick = {
-                                    ServerManager.selectServer(s.id)
-                                    onNavigateToConsole()
-                                },
-                                modifier = Modifier.height(44.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                                border = BorderStroke(1.dp, MinecraftBorder)
-                            ) {
-                                Icon(Icons.Default.Terminal, contentDescription = "Terminal", modifier = Modifier.size(18.dp))
-                            }
-
-                            // Config Button
-                            OutlinedButton(
-                                onClick = {
-                                    ServerManager.selectServer(s.id)
-                                    onNavigateToConfig()
-                                },
-                                modifier = Modifier.height(44.dp),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                                border = BorderStroke(1.dp, MinecraftBorder)
-                            ) {
-                                Icon(Icons.Default.Settings, contentDescription = "Configurar", modifier = Modifier.size(18.dp))
-                            }
-
-                            // Delete Button: PROMINENT AND ALWAYS VISIBLE (quando nao estiver rodando)
-                            if (!isServerRunning) {
-                                IconButton(
-                                    onClick = { serverToDelete = s },
-                                    modifier = Modifier.size(44.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.DeleteOutline,
-                                        contentDescription = "Excluir Servidor",
-                                        tint = MinecraftRedstone
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Card de Controle do Túnel Playit.gg
-        val isPlayitRunning by PlayitTunnelProcess.isRunningFlow.collectAsState()
-        val savedSecret = remember(playitSessionToConfirm, isPlayitRunning) { PlayitManager.getSavedSecretKey(context) }
-
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.5.dp, if (isPlayitRunning) MinecraftDiamond else MinecraftBorder),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Túnel Playit.gg", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-                    Surface(
-                        color = if (isPlayitRunning) MinecraftEmerald.copy(alpha = 0.2f) else MinecraftBorder.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, if (isPlayitRunning) MinecraftEmerald else MinecraftBorder)
-                    ) {
-                        Text(
-                            text = if (isPlayitRunning) "ONLINE" else "OFFLINE",
-                            color = if (isPlayitRunning) MinecraftEmerald else TextSecondary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                val activeDomain = activeConfig?.customDomain
-                if (!activeDomain.isNullOrBlank()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MinecraftCardSurface, RoundedCornerShape(8.dp))
-                            .padding(10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Endereço Global Ativo:", fontSize = 10.sp, color = MinecraftDiamond, fontWeight = FontWeight.Bold)
-                            Text(activeDomain, fontSize = 13.sp, color = TextPrimary, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-                        }
-                        IconButton(onClick = { copyToClipboard(context, activeDomain) }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                } else {
-                    Text(
-                        text = if (isPlayitRunning) {
-                            "Conectando e aguardando registro do túnel..."
-                        } else if (!savedSecret.isNullOrBlank()) {
-                            "Agente configurado com chave salva. Pronto para iniciar."
-                        } else {
-                            "Nenhum agente vinculado. Clique em 'Vincular' para configurar sua conta."
-                        },
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (isPlayitRunning) {
-                        Button(
-                            onClick = { PlayitTunnelProcess.stop() },
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MinecraftRedstone),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Stop, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("PARAR TÚNEL", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    } else {
-                        Button(
-                            onClick = {
-                                PlayitTunnelProcess.start(
-                                    context = context,
-                                    onLog = { msg -> ServerManager.addLog(msg) },
-                                    onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
-                                    onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
-                                )
-                                if (savedSecret.isNullOrBlank()) {
-                                    playitSessionToConfirm = PlayitClaimSession("", "")
-                                } else {
-                                    coroutineScope.launch {
-                                        val active = activeConfig
-                                        val needJava = active == null || active.serverType != ServerType.GEYSER_STANDALONE
-                                        val needBedrock = active == null || active.enableGeyser || active.serverType == ServerType.GEYSER_STANDALONE
-                                        PlayitManager.ensureTunnelsExist(context, needJava, needBedrock)
-                                    }
-                                }
-                            },
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MinecraftDiamond),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("INICIAR PLAYIT", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    }
-
-                    OutlinedButton(
-                        onClick = {
-                            PlayitTunnelProcess.start(
-                                context = context,
-                                onLog = { msg -> ServerManager.addLog(msg) },
-                                onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
-                                onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
-                            )
-                            playitSessionToConfirm = PlayitClaimSession("", "")
-                        },
-                        modifier = Modifier.height(44.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MinecraftDiamond),
-                        border = BorderStroke(1.dp, MinecraftDiamond),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("VINCULAR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // Active Server Live Performance (if running and config exists)
-        if ((state == ServerState.RUNNING || state == ServerState.STARTING) && activeConfig != null) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Desempenho em Tempo Real - ${activeConfig.name}",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        color = TextPrimary
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        StatCard(
-                            title = "TEMPO ONLINE",
-                            value = stats.formattedUptime,
-                            subtitle = "Uptime contínuo",
-                            icon = Icons.Default.Timer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            title = "JOGADORES",
-                            value = "${stats.onlinePlayers}/${activeConfig.maxPlayers}",
-                            subtitle = "Online agora",
-                            icon = Icons.Default.People,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(text = "Uso de RAM do Celular", fontSize = 12.sp, color = TextSecondary)
-                        Text(
-                            text = "${stats.usedRamMb}MB / ${stats.totalRamMb}MB",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MinecraftEmerald
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val ramFraction = if (stats.totalRamMb > 0) {
-                        (stats.usedRamMb.toFloat() / stats.totalRamMb.toFloat()).coerceIn(0f, 1f)
-                    } else 0.3f
-                    LinearProgressIndicator(
-                        progress = { ramFraction },
-                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                        color = if (ramFraction > 0.85f) MinecraftRedstone else MinecraftEmerald,
-                        trackColor = MinecraftCardSurface
-                    )
-                }
-            }
-
-            // Quick Console Preview
-            Card(
-                colors = CardDefaults.cardColors(containerColor = ConsoleBg),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(
@@ -1006,31 +343,513 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Console ao Vivo",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            text = downloadProg.first.ifEmpty { "Preparando ambiente..." },
+                            color = MinecraftEmerald,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
-                        TextButton(onClick = onNavigateToConsole) {
-                            Text("Abrir Terminal Completo", color = MinecraftEmerald, fontSize = 13.sp)
-                        }
+                        Text(
+                            text = "${(downloadProg.second * 100).toInt()}%",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { downloadProg.second },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        color = MinecraftEmerald,
+                        trackColor = MinecraftCardSurface
+                    )
+                }
+            }
+        }
+
+        // Empty State (quando não há servidores)
+        if (servers.isEmpty()) {
+            Surface(
+                color = MinecraftDarkSurface,
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MinecraftBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 20.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .background(MinecraftCardSurface, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Dns,
+                            contentDescription = null,
+                            tint = MinecraftEmerald,
+                            modifier = Modifier.size(28.dp)
+                        )
                     }
 
-                    val previewLogs = logs.takeLast(3)
-                    previewLogs.forEach { log ->
+                    Text(
+                        text = "Nenhum Servidor Criado",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+
+                    Text(
+                        text = "Crie seu primeiro servidor para jogar com amigos pelo celular ou computador.",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Button(
+                        onClick = { showCreateDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.height(46.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = MinecraftObsidian)
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "[${log.formattedTime}] ${log.text}",
-                            fontSize = 11.sp,
-                            color = when (log.type) {
-                                LogType.ERROR -> ConsoleRed
-                                LogType.WARN -> ConsoleYellow
-                                LogType.JOIN -> ConsoleGreen
-                                LogType.SYSTEM -> ConsoleCyan
-                                else -> TextSecondary
-                            },
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 2
+                            "Criar Primeiro Servidor",
+                            color = MinecraftObsidian,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
                         )
+                    }
+                }
+            }
+        } else {
+            // HERO CARD: O Servidor Ativo (Unificado, sem caixas aninhadas)
+            activeConfig?.let { s ->
+                val isServerRunning = isRunning || isStarting
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(
+                        1.5.dp,
+                        if (isRunning) MinecraftEmerald else if (isStarting) MinecraftGold else MinecraftBorder
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // 1. Header do Servidor: Nome, Motor, Versão e Estado
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = s.name,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isRunning) MinecraftEmerald else TextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "${s.serverType.displayName} ${if (s.serverType != ServerType.GEYSER_STANDALONE) s.version else ""}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (s.serverType == ServerType.GEYSER_STANDALONE) MinecraftGold else MinecraftDiamond
+                                    )
+                                    Text(
+                                        text = " • ${s.allocatedRamMb}MB RAM",
+                                        fontSize = 12.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+
+                            StateBadge(state = state)
+                        }
+
+                        // 2. HUD de Desempenho em Tempo Real (Apenas quando Rodando)
+                        if (isRunning) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MinecraftCardSurface, RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("TEMPO ATIVO", fontSize = 9.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                                    Text(stats.formattedUptime, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary, fontFamily = FontFamily.Monospace)
+                                }
+                                Box(modifier = Modifier.width(1.dp).height(24.dp).background(MinecraftBorder))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("JOGADORES", fontSize = 9.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                                    Text("${stats.onlinePlayers}/${s.maxPlayers}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MinecraftEmerald)
+                                }
+                                Box(modifier = Modifier.width(1.dp).height(24.dp).background(MinecraftBorder))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("RAM CELULAR", fontSize = 9.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                                    Text("${stats.usedRamMb} MB", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                }
+                            }
+                        }
+
+                        // 3. Área de Endereços de Conexão (Limpa e Direta)
+                        Surface(
+                            color = MinecraftCardSurface,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Endereço Java (se não for proxy puro)
+                                if (s.serverType != ServerType.GEYSER_STANDALONE) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                            Icon(Icons.Default.Computer, contentDescription = null, tint = MinecraftEmerald, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column {
+                                                Text("Java (PC / Pojav)", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.SemiBold)
+                                                Text(
+                                                    text = s.friendlyJavaAddress,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = TextPrimary,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                            }
+                                        }
+                                        if (s.customDomain.isNotBlank()) {
+                                            IconButton(
+                                                onClick = { copyToClipboard(context, s.friendlyJavaAddress) },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Endereço Bedrock (se crossplay ativo)
+                                if (s.enableGeyser || s.serverType == ServerType.GEYSER_STANDALONE) {
+                                    if (s.serverType != ServerType.GEYSER_STANDALONE) {
+                                        HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                            Icon(Icons.Default.Smartphone, contentDescription = null, tint = MinecraftLapis, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column {
+                                                Text("Bedrock (Celular / Console)", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.SemiBold)
+                                                Text(
+                                                    text = s.friendlyBedrockAddress,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = TextPrimary,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                            }
+                                        }
+                                        if (s.bedrockDomain.isNotBlank() || s.customDomain.isNotBlank()) {
+                                            IconButton(
+                                                onClick = { copyToClipboard(context, s.friendlyBedrockAddress) },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Status do Túnel Playit.gg
+                                if (s.enablePlayitTunnel) {
+                                    HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(7.dp)
+                                                    .background(if (isPlayitRunning) MinecraftEmerald else TextMuted, CircleShape)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = if (isPlayitRunning) "Túnel Playit.gg ativo" else "Túnel Playit.gg offline",
+                                                fontSize = 11.sp,
+                                                color = if (isPlayitRunning) MinecraftEmerald else TextSecondary
+                                            )
+                                        }
+
+                                        if (savedSecret.isNullOrBlank()) {
+                                            TextButton(
+                                                onClick = {
+                                                    PlayitTunnelProcess.start(
+                                                        context = context,
+                                                        onLog = { msg -> ServerManager.addLog(msg) },
+                                                        onDomainFound = { domain -> ServerManager.updateActiveServerDomain(domain) },
+                                                        onBedrockDomainFound = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
+                                                    )
+                                                    playitSessionToConfirm = PlayitClaimSession(code = "", claimUrl = "")
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(28.dp)
+                                            ) {
+                                                Text("Vincular Conta", color = MinecraftDiamond, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Alerta: Converter Geyser Standalone para PaperMC
+                        if (s.serverType == ServerType.GEYSER_STANDALONE) {
+                            Surface(
+                                color = MinecraftGold.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, MinecraftGold.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Modo Proxy (Sem mapa)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MinecraftGold
+                                        )
+                                        Text(
+                                            text = "Gere terreno e blocos completos mudando para PaperMC.",
+                                            fontSize = 11.sp,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = {
+                                            val updated = s.copy(serverType = ServerType.PAPER, enableGeyser = true, enableFloodgate = true)
+                                            ServerManager.updateServer(context, updated)
+                                            Toast.makeText(context, "Convertido para PaperMC com sucesso!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Text("Converter", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MinecraftObsidian)
+                                    }
+                                }
+                            }
+                        }
+
+                        // 4. Ações Principais do Servidor
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Botão Primário: Iniciar / Parar
+                            if (isRunning) {
+                                Button(
+                                    onClick = { ServerManager.stopServer(context) },
+                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftRedstone),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Stop, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("PARAR SERVIDOR", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                }
+                            } else if (isStarting) {
+                                Button(
+                                    onClick = {},
+                                    enabled = false,
+                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    colors = ButtonDefaults.buttonColors(disabledContainerColor = MinecraftGold.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = MinecraftObsidian, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("INICIANDO...", fontWeight = FontWeight.Bold, color = MinecraftObsidian, fontSize = 13.sp)
+                                }
+                            } else {
+                                Button(
+                                    onClick = { ServerManager.startServer(context, s.id) },
+                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("INICIAR SERVIDOR", fontWeight = FontWeight.Bold, color = MinecraftObsidian, fontSize = 13.sp)
+                                }
+                            }
+
+                            // Botão Console / Terminal
+                            OutlinedButton(
+                                onClick = {
+                                    ServerManager.selectServer(s.id)
+                                    onNavigateToConsole()
+                                },
+                                modifier = Modifier.height(48.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                border = BorderStroke(1.dp, MinecraftBorder)
+                            ) {
+                                Icon(Icons.Default.Terminal, contentDescription = "Terminal", modifier = Modifier.size(20.dp))
+                            }
+
+                            // Botão Configurações
+                            OutlinedButton(
+                                onClick = {
+                                    ServerManager.selectServer(s.id)
+                                    onNavigateToConfig()
+                                },
+                                modifier = Modifier.height(48.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                border = BorderStroke(1.dp, MinecraftBorder)
+                            ) {
+                                Icon(Icons.Default.Settings, contentDescription = "Configurar", modifier = Modifier.size(20.dp))
+                            }
+
+                            // Botão Excluir (apenas quando parado)
+                            if (!isServerRunning) {
+                                IconButton(
+                                    onClick = { serverToDelete = s },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.DeleteOutline,
+                                        contentDescription = "Excluir Servidor",
+                                        tint = TextMuted
+                                    )
+                                }
+                            }
+                        }
+
+                        // 5. Prévia do Terminal (Apenas quando Rodando)
+                        if (isRunning && logs.isNotEmpty()) {
+                            Surface(
+                                color = ConsoleBg,
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, MinecraftBorder),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigateToConsole() }
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Console em Tempo Real", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                                        Text("Abrir Terminal →", fontSize = 11.sp, color = MinecraftEmerald, fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    val previewLogs = logs.takeLast(2)
+                                    previewLogs.forEach { log ->
+                                        Text(
+                                            text = "[${log.formattedTime}] ${log.text}",
+                                            fontSize = 11.sp,
+                                            color = when (log.type) {
+                                                LogType.ERROR -> ConsoleRed
+                                                LogType.WARN -> ConsoleYellow
+                                                LogType.JOIN -> ConsoleGreen
+                                                LogType.SYSTEM -> ConsoleCyan
+                                                else -> TextSecondary
+                                            },
+                                            fontFamily = FontFamily.Monospace,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Lista de Outros Servidores (se houver mais de um cadastrado)
+            val otherServers = servers.filter { it.id != activeServerId }
+            if (otherServers.isNotEmpty()) {
+                Text(
+                    text = "Outros Servidores (${otherServers.size})",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+
+                otherServers.forEach { s ->
+                    Surface(
+                        color = MinecraftDarkSurface,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MinecraftBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!isRunning && !isStarting) {
+                                    ServerManager.selectServer(s.id)
+                                }
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(s.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(
+                                    text = "${s.serverType.displayName} ${s.version} • ${s.allocatedRamMb}MB",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    if (!isRunning && !isStarting) {
+                                        ServerManager.selectServer(s.id)
+                                    }
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Text("Ativar", fontSize = 11.sp, color = MinecraftEmerald)
+                            }
+                        }
                     }
                 }
             }
@@ -1054,55 +873,21 @@ fun StateBadge(state: ServerState) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .background(color.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
-            .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(8.dp)
+                .size(7.dp)
                 .background(color, CircleShape)
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = label,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             color = color
         )
-    }
-}
-
-@Composable
-fun StatCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MinecraftCardSurface),
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(text = title, fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                Icon(icon, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            Text(text = subtitle, fontSize = 11.sp, color = TextSecondary)
-        }
     }
 }
 

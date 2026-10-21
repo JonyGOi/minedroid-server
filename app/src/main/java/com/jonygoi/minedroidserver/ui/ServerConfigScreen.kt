@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.jonygoi.minedroidserver.server.*
 import com.jonygoi.minedroidserver.theme.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerConfigScreen(onSaved: () -> Unit) {
     val context = LocalContext.current
@@ -40,21 +43,17 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Icon(Icons.Default.Settings, contentDescription = null, tint = TextMuted, modifier = Modifier.size(48.dp))
                 Text(
-                    text = "Nenhum Servidor Selecionado",
+                    text = "Nenhum servidor selecionado",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
-                Text(
-                    text = "Crie seu primeiro servidor na aba 'Servidores' para poder configurá-lo aqui.",
-                    fontSize = 13.sp,
-                    color = TextSecondary,
-                    textAlign = TextAlign.Center
-                )
+                Button(onClick = onSaved, colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald)) {
+                    Text("Voltar ao Painel", color = MinecraftObsidian, fontWeight = FontWeight.Bold)
+                }
             }
         }
         return
@@ -88,31 +87,46 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header
-        Text(
-            text = "Configurações: $serverName",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextPrimary
-        )
+        // Top App Bar com botão Voltar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onSaved) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = "Configurações",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = serverName,
+                    fontSize = 12.sp,
+                    color = TextSecondary
+                )
+            }
+        }
 
-        // Identificação do Servidor
+        // Card 1: Identificação do Servidor
         Card(
             colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
             shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
+            border = BorderStroke(1.dp, MinecraftBorder),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Identificação do Servidor",
+                    text = "Identificação",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MinecraftDiamond
+                    color = TextPrimary
                 )
 
                 OutlinedTextField(
@@ -127,14 +141,14 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     )
                 )
 
-                // Informações dos endereços Playit (gerados automaticamente pelo túnel)
+                // Informações dos endereços Playit (somente-leitura)
                 if (currentConfig.enablePlayitTunnel) {
                     Surface(
                         color = MinecraftCardSurface,
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Dns, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -145,28 +159,22 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                                     color = MinecraftDiamond
                                 )
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "O domínio e as portas são gerados e vinculados automaticamente pelo Playit.gg.",
-                                fontSize = 11.sp,
-                                color = TextSecondary
-                            )
                             if (currentConfig.customDomain.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "☕ Java: ${currentConfig.friendlyJavaAddress}",
-                                    fontSize = 11.sp,
+                                    text = "Java: ${currentConfig.friendlyJavaAddress}",
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MinecraftEmerald
+                                    color = MinecraftEmerald,
+                                    fontFamily = FontFamily.Monospace
                                 )
                             }
                             if (currentConfig.bedrockDomain.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "🎮 Bedrock: ${currentConfig.friendlyBedrockAddress}",
-                                    fontSize = 11.sp,
+                                    text = "Bedrock: ${currentConfig.friendlyBedrockAddress}",
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MinecraftLapis
+                                    color = MinecraftLapis,
+                                    fontFamily = FontFamily.Monospace
                                 )
                             }
                         }
@@ -175,183 +183,133 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             }
         }
 
-        // Section: Tipo de Servidor
-        Text(
-            text = "Motor do Servidor (Software)",
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            color = MinecraftEmerald
-        )
-
-        ServerType.values().forEach { type ->
-            val isSelected = selectedType == type
-            val isRecommended = type == ServerType.PAPER
-            val isProxyOnly = type == ServerType.GEYSER_STANDALONE
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) MinecraftCardSurface else MinecraftDarkSurface
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(
-                        1.dp,
-                        if (isSelected) MinecraftEmerald else if (isRecommended) MinecraftEmerald.copy(alpha = 0.5f) else MinecraftBorder,
-                        RoundedCornerShape(12.dp)
-                    )
-                    .clickable { selectedType = type }
+        // Card 2: Motor e Versão do Servidor
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, MinecraftBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = isSelected,
-                        onClick = { selectedType = type },
-                        colors = RadioButtonDefaults.colors(selectedColor = MinecraftEmerald)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = type.displayName,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = when {
-                                    isRecommended -> MinecraftEmerald
-                                    isProxyOnly -> TextMuted
-                                    else -> TextPrimary
-                                }
-                            )
-                            if (isRecommended) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    color = MinecraftEmerald.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = "RECOMENDADO",
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MinecraftEmerald,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            text = type.category,
-                            fontSize = 12.sp,
-                            color = if (isProxyOnly) MinecraftGold else TextSecondary
-                        )
-                    }
-                }
-            }
-        }
+                Text(
+                    text = "Motor & Versão",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
 
-        // Section: Versão do Minecraft (se não for Geyser Standalone)
-        if (selectedType != ServerType.GEYSER_STANDALONE) {
-            Text(
-                text = "Versão do Minecraft",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = MinecraftEmerald
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ServerConfig.AVAILABLE_VERSIONS.take(4).forEach { ver ->
-                    val isVerSelected = selectedVersion == ver
-                    FilterChip(
-                        selected = isVerSelected,
-                        onClick = { selectedVersion = ver },
-                        label = { Text(ver) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MinecraftEmerald,
-                            selectedLabelColor = MinecraftObsidian,
-                            containerColor = MinecraftDarkSurface,
-                            labelColor = TextPrimary
-                        )
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ServerConfig.AVAILABLE_VERSIONS.drop(4).take(4).forEach { ver ->
-                    val isVerSelected = selectedVersion == ver
-                    FilterChip(
-                        selected = isVerSelected,
-                        onClick = { selectedVersion = ver },
-                        label = { Text(ver) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MinecraftEmerald,
-                            selectedLabelColor = MinecraftObsidian,
-                            containerColor = MinecraftDarkSurface,
-                            labelColor = TextPrimary
-                        )
-                    )
-                }
-            }
-        }
-
-        // Section: Crossplay GeyserMC ou Aviso de Proxy
-        if (selectedType == ServerType.GEYSER_STANDALONE) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, MinecraftGold.copy(alpha = 0.6f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = MinecraftGold, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "GeyserMC Standalone (Sem Mundo Próprio)",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MinecraftGold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "O modo Geyser Standalone é apenas um proxy/ponte para conectar celulares a outro servidor Java externo. Ele NÃO gera blocos, mundo nem mobs.\n\nPara ter um servidor completo onde você e seus amigos possam jogar juntos no mesmo mapa gerado pelo app, mude para PaperMC abaixo:",
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Button(
-                        onClick = {
-                            selectedType = ServerType.PAPER
-                            enableGeyser = true
-                            enableFloodgate = true
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                // Seleção compacta dos motores principais
+                listOf(
+                    ServerType.PAPER to "PaperMC (Recomendado com Mundo)",
+                    ServerType.PURPUR to "Purpur (Ultra Otimizado)",
+                    ServerType.VANILLA to "Vanilla (Oficial Mojang)",
+                    ServerType.FABRIC to "Fabric (Modded)",
+                    ServerType.GEYSER_STANDALONE to "GeyserMC Proxy (Apenas Ponte)"
+                ).forEach { (type, label) ->
+                    val isSel = selectedType == type
+                    Surface(
+                        color = if (isSel) MinecraftCardSurface else MinecraftDarkSurface,
                         shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, if (isSel) MinecraftEmerald else MinecraftBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedType = type }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSel,
+                                onClick = { selectedType = type },
+                                colors = RadioButtonDefaults.colors(selectedColor = MinecraftEmerald),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = label,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSel) TextPrimary else TextSecondary
+                            )
+                        }
+                    }
+                }
+
+                // Alerta se Geyser Standalone estiver selecionado
+                if (selectedType == ServerType.GEYSER_STANDALONE) {
+                    Surface(
+                        color = MinecraftGold.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MinecraftGold.copy(alpha = 0.4f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Converter para PaperMC (Mundo + Crossplay) ⭐",
-                            fontWeight = FontWeight.Bold,
-                            color = MinecraftObsidian,
-                            fontSize = 12.sp
-                        )
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = "Atenção: Modo Proxy não gera mundo!",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MinecraftGold
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Ele apenas repassa conexões para outro servidor Java externo.",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                }
+
+                // Seleção de Versão (Chips roláveis horizontais com versões reais)
+                if (selectedType != ServerType.GEYSER_STANDALONE) {
+                    Text(
+                        text = "Versão do Minecraft",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ServerConfig.AVAILABLE_VERSIONS.forEach { ver ->
+                            val isVerSel = selectedVersion == ver
+                            FilterChip(
+                                selected = isVerSel,
+                                onClick = { selectedVersion = ver },
+                                label = { Text(ver) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MinecraftEmerald,
+                                    selectedLabelColor = MinecraftObsidian,
+                                    containerColor = MinecraftCardSurface,
+                                    labelColor = TextPrimary
+                                )
+                            )
+                        }
                     }
                 }
             }
-        } else if (selectedType == ServerType.PAPER || selectedType == ServerType.PURPUR) {
+        }
+
+        // Card 3: Crossplay Bedrock + Java
+        if (selectedType == ServerType.PAPER || selectedType == ServerType.PURPUR) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
+                border = BorderStroke(1.dp, MinecraftBorder),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -359,13 +317,13 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Crossplay GeyserMC (Bedrock + Java)",
+                                text = "Crossplay Bedrock (GeyserMC)",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MinecraftLapis
+                                color = TextPrimary
                             )
                             Text(
-                                text = "Permite que celulares, consoles (Switch, PS, Xbox) e Win10 joguem juntos no mesmo servidor Java!",
+                                text = "Permite jogadores de Celular, Console e PC no mesmo mundo.",
                                 fontSize = 12.sp,
                                 color = TextSecondary
                             )
@@ -375,13 +333,13 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                             onCheckedChange = { enableGeyser = it },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = MinecraftObsidian,
-                                checkedTrackColor = MinecraftLapis
+                                checkedTrackColor = MinecraftEmerald
                             )
                         )
                     }
 
                     if (enableGeyser) {
-                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -395,7 +353,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                                     color = TextPrimary
                                 )
                                 Text(
-                                    text = "Jogadores Bedrock entram direto, sem precisar de conta de PC Java.",
+                                    text = "Jogadores de celular entram direto sem precisar de conta de PC.",
                                     fontSize = 11.sp,
                                     color = TextMuted
                                 )
@@ -403,7 +361,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                             Checkbox(
                                 checked = enableFloodgate,
                                 onCheckedChange = { enableFloodgate = it },
-                                colors = CheckboxDefaults.colors(checkedColor = MinecraftLapis)
+                                colors = CheckboxDefaults.colors(checkedColor = MinecraftEmerald)
                             )
                         }
                     }
@@ -411,21 +369,24 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             }
         }
 
-        // Section: Alocação de Memória RAM
+        // Card 4: Memória RAM & Otimização
         Card(
             colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
             shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
+            border = BorderStroke(1.dp, MinecraftBorder),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Memória RAM do Servidor",
+                        text = "Memória RAM",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -439,12 +400,10 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                 }
 
                 Text(
-                    text = "RAM Total do Celular: ${totalRam}MB (Recomendado: ${recommendedRam}MB)",
-                    fontSize = 12.sp,
+                    text = "Aparelho: ${totalRam}MB totais (Recomendado: ${recommendedRam}MB)",
+                    fontSize = 11.sp,
                     color = TextSecondary
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
 
                 Slider(
                     value = ramMb,
@@ -458,7 +417,9 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     )
                 )
 
-                // Aikar's GC Flags
+                HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+
+                // Aikar's Flags
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -466,13 +427,13 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Otimizações de JVM (Aikar's Flags)",
+                            text = "Aikar's Flags (Otimização JVM)",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MinecraftGold
+                            color = TextPrimary
                         )
                         Text(
-                            text = "Elimina travamentos ajustando a coleta de lixo da JVM no celular.",
+                            text = "Ajusta o Garbage Collector da JVM para manter TPS estável.",
                             fontSize = 11.sp,
                             color = TextMuted
                         )
@@ -482,44 +443,30 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                         onCheckedChange = { enableAikar = it },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = MinecraftObsidian,
-                            checkedTrackColor = MinecraftGold
+                            checkedTrackColor = MinecraftEmerald
                         )
                     )
                 }
             }
         }
 
-        // Section: Configurações do Jogo (server.properties se for Java)
+        // Card 5: Regras de Jogo
         if (selectedType.isJava) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MinecraftDarkSurface),
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MinecraftBorder, RoundedCornerShape(14.dp))
+                border = BorderStroke(1.dp, MinecraftBorder),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Opções do Jogo (server.properties)",
+                        text = "Regras do Jogo",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
-                    )
-
-                    // MOTD
-                    OutlinedTextField(
-                        value = motd,
-                        onValueChange = { motd = it },
-                        label = { Text("Nome do Servidor (MOTD)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MinecraftEmerald,
-                            unfocusedBorderColor = MinecraftBorder
-                        )
                     )
 
                     // Modo Pirata / Original
@@ -530,13 +477,13 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (!onlineMode) "Modo Pirata + Original (Recomendado)" else "Somente Contas Originais",
+                                text = if (!onlineMode) "Modo Pirata + Original" else "Apenas Contas Oficiais",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary
                             )
                             Text(
-                                text = if (!onlineMode) "Permite contas TLauncher, Pojav, etc." else "Exige conta oficial da Microsoft",
+                                text = if (!onlineMode) "Permite contas TLauncher, Pojav e Bedrock." else "Exige conta oficial Microsoft.",
                                 fontSize = 11.sp,
                                 color = TextMuted
                             )
@@ -551,13 +498,15 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                         )
                     }
 
+                    HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+
                     // PvP
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "Combate PvP Ativado", fontSize = 13.sp, color = TextPrimary)
+                        Text("Combate PvP Habilitado", fontSize = 13.sp, color = TextPrimary)
                         Switch(
                             checked = pvp,
                             onCheckedChange = { pvp = it },
@@ -568,25 +517,22 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                         )
                     }
 
-                    // Distancia de Renderizacao (View Distance)
+                    HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+
+                    // Distância de Renderização
                     Column {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = "Distância de Renderização (Chunks)", fontSize = 13.sp, color = TextPrimary)
-                            Text(text = "${viewDistance.toInt()} chunks", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MinecraftEmerald)
+                            Text("Distância de Visão", fontSize = 13.sp, color = TextPrimary)
+                            Text("${viewDistance.toInt()} chunks", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MinecraftEmerald)
                         }
-                        Text(
-                            text = "Valores entre 4 e 6 são recomendados para evitar superaquecimento no celular.",
-                            fontSize = 11.sp,
-                            color = TextMuted
-                        )
                         Slider(
                             value = viewDistance,
                             onValueChange = { viewDistance = it },
-                            valueRange = 2f..12f,
-                            steps = 9,
+                            valueRange = 2f..10f,
+                            steps = 7,
                             colors = SliderDefaults.colors(
                                 thumbColor = MinecraftEmerald,
                                 activeTrackColor = MinecraftEmerald,
@@ -595,25 +541,33 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                         )
                     }
 
-                    // Max Players
+                    HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+
+                    // Limite de Jogadores
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "Limite de Jogadores: $maxPlayers", fontSize = 13.sp, color = TextPrimary)
+                        Text("Limite de Jogadores: $maxPlayers", fontSize = 13.sp, color = TextPrimary)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(
+                            OutlinedButton(
                                 onClick = { if (maxPlayers > 2) maxPlayers -= 2 },
-                                contentPadding = PaddingValues(horizontal = 12.dp)
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                border = BorderStroke(1.dp, MinecraftBorder)
                             ) {
-                                Text("-")
+                                Text("-", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                             }
-                            FilledTonalButton(
+                            OutlinedButton(
                                 onClick = { if (maxPlayers < 50) maxPlayers += 2 },
-                                contentPadding = PaddingValues(horizontal = 12.dp)
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                border = BorderStroke(1.dp, MinecraftBorder)
                             ) {
-                                Text("+")
+                                Text("+", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -621,7 +575,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             }
         }
 
-        // Save Button
+        // Botão Salvar
         Button(
             onClick = {
                 val updatedConfig = currentConfig.copy(
@@ -649,9 +603,9 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp),
+                .height(48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(10.dp)
         ) {
             Icon(Icons.Default.Save, contentDescription = null, tint = MinecraftObsidian)
             Spacer(modifier = Modifier.width(8.dp))
@@ -659,7 +613,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                 "SALVAR CONFIGURAÇÕES",
                 fontWeight = FontWeight.Bold,
                 color = MinecraftObsidian,
-                fontSize = 15.sp
+                fontSize = 14.sp
             )
         }
     }
