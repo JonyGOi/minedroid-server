@@ -172,11 +172,11 @@ object ServerManager {
         }
     }
 
-    fun adaptGeyserPort(newPort: Int, context: Context) {
+    fun updateActiveServerGeyserPort(newPort: Int, context: Context? = null) {
         scope.launch(Dispatchers.Main) {
             val active = getActiveConfig() ?: return@launch
             if (active.geyserPort != newPort && newPort in 1024..65535) {
-                addLog(LogMessage("[MineDroid] 🔄 Sincronizando porta do GeyserMC: ${active.geyserPort} ➔ $newPort (conforme túnel Playit)", LogType.SYSTEM))
+                addLog(LogMessage("[MineDroid] ℹ️ Porta local do GeyserMC atualizada para $newPort", LogType.INFO))
                 val updated = active.copy(geyserPort = newPort)
                 val current = _servers.value.toMutableList()
                 val index = current.indexOfFirst { it.id == updated.id }
@@ -184,19 +184,19 @@ object ServerManager {
                     current[index] = updated
                     _servers.value = current
                 }
-                ServerStorage.saveServers(context, current)
-                withContext(Dispatchers.IO) {
-                    val sDir = ServerInstaller.getServerDirectory(context, active.id)
-                    ServerInstaller.setupGeyserConfig(sDir, updated)
-                }
-
-                if (_state.value == ServerState.RUNNING || _state.value == ServerState.STARTING) {
-                    addLog(LogMessage("[MineDroid] 🔄 Reiniciando servidor para aplicar nova porta do GeyserMC ($newPort)...", LogType.WARN))
-                    restartServer(context)
+                val ctx = context ?: appContext
+                ctx?.let { c ->
+                    ServerStorage.saveServers(c, current)
+                    withContext(Dispatchers.IO) {
+                        val sDir = ServerInstaller.getServerDirectory(c, active.id)
+                        ServerInstaller.setupGeyserConfig(sDir, updated)
+                    }
                 }
             }
         }
     }
+
+    fun adaptGeyserPort(newPort: Int, context: Context) = updateActiveServerGeyserPort(newPort, context)
 
     fun restartServer(context: Context) {
         scope.launch {
@@ -334,12 +334,6 @@ object ServerManager {
 
             // 3. Inicia o túnel Playit.gg nativo em paralelo se habilitado na configuração
             if (cfg.enablePlayitTunnel) {
-                PlayitManager.ensureTunnelsExist(
-                    context = context,
-                    needJava = cfg.serverType != ServerType.GEYSER_STANDALONE,
-                    needBedrock = cfg.enableGeyser || cfg.serverType == ServerType.GEYSER_STANDALONE
-                )
-
                 PlayitTunnelProcess.start(
                     context = context,
                     onLog = { playitMsg -> addLog(playitMsg) },

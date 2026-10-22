@@ -169,19 +169,11 @@ object PlayitTunnelProcess {
                                 onLog(LogMessage("[Playit.gg] 📱 Túnel Bedrock ativo: $cleanMsg", LogType.SYSTEM))
                                 onBedrockDomainFound(domain)
 
-                                // Extrai a porta do túnel (local ou pública) e adapta o GeyserMC imediatamente
+                                // Se a porta local de encaminhamento for diferente de 19132, atualiza a config do Geyser sem reiniciar
                                 val localTargetMatch = Regex("""=>\s*(?:[0-9\.]+):\s*(\d+)""").find(cleanMsg)
                                 val targetLocalPort = localTargetMatch?.groupValues?.get(1)?.toIntOrNull()
-                                val publicPort = domain.substringAfter(":", "").toIntOrNull()
-
-                                val effectivePort = when {
-                                    targetLocalPort != null && targetLocalPort != 25565 && targetLocalPort > 0 -> targetLocalPort
-                                    publicPort != null && publicPort != 25565 && publicPort > 0 -> publicPort
-                                    else -> null
-                                }
-
-                                if (effectivePort != null) {
-                                    ServerManager.adaptGeyserPort(effectivePort, context)
+                                if (targetLocalPort != null && targetLocalPort != 25565 && targetLocalPort != 19132 && targetLocalPort > 0) {
+                                    ServerManager.updateActiveServerGeyserPort(targetLocalPort, context)
                                 }
                             } else if (isJava) {
                                 // Se o servidor ativo salvou indevidamente este domínio Java como Bedrock no passado, limpa o valor falso
@@ -230,22 +222,6 @@ object PlayitTunnelProcess {
                                 onLog(LogMessage("[Playit.gg] ⚠️ ATENÇÃO BEDROCK: Nenhum túnel Bedrock (UDP :19132) foi detectado na sua conta Playit!", LogType.WARN))
                                 onLog(LogMessage("[Playit.gg] ⚠️ Seus túneis ativos são apenas Java (TCP :25565). O GeyserMC está ouvindo localmente na UDP :19132, mas precisa de um túnel Bedrock no Playit para receber conexões externas pelo celular.", LogType.WARN))
                                 onLog(LogMessage("[Playit.gg] 👉 Acesse https://playit.gg/account/tunnels e altere o túnel para 'Minecraft Bedrock' (UDP :19132), ou clique em 'Criar Automático' no app.", LogType.WARN))
-
-                                // Tentativa de criação automática via API Playit.gg
-                                val secret = PlayitManager.getSavedSecretKey(context)
-                                if (!secret.isNullOrBlank()) {
-                                    processScope?.launch {
-                                        val ok = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
-                                        if (ok.success) {
-                                            onLog(LogMessage("[Playit.gg] ⚡ Túnel Bedrock provisionado via API com sucesso! Reiniciando agente...", LogType.SYSTEM))
-                                            delay(1500)
-                                            withContext(Dispatchers.Main) {
-                                                stop()
-                                                start(context, onLog, onDomainFound, onBedrockDomainFound, onClaimUrlFound)
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
                         continue

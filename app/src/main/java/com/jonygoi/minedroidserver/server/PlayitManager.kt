@@ -487,19 +487,38 @@ object PlayitManager {
             return@withContext TunnelCreationResult(false, "Chave de autenticação não encontrada")
         }
 
-        // 1. Obter agent_id
-        var agentId: String? = null
-        val currentAgentUrl = agentUrl.value
-        if (!currentAgentUrl.isNullOrBlank()) {
-            val match = Regex("""agents/([a-zA-Z0-9\-]+)""").find(currentAgentUrl)
-            if (match != null) {
-                agentId = match.groupValues[1]
+        // 1. Obter dados de execução e verificar túneis já existentes
+        val (retrievedAgentId, existingTunnels) = fetchAgentRunData(secretKey)
+        val isBedrock = tunnelType.contains("bedrock", ignoreCase = true)
+
+        // Verifica se já existe um túnel deste tipo ativo na conta!
+        val alreadyExisting = existingTunnels.find { it.isBedrock == isBedrock }
+        if (alreadyExisting != null) {
+            ServerManager.addLog(LogMessage("[Playit.gg] ℹ️ Túnel ${if (isBedrock) "Bedrock" else "Java"} já existente detectado: ${alreadyExisting.domain}", LogType.INFO))
+            if (isBedrock) {
+                ServerManager.updateActiveServerBedrockDomain(alreadyExisting.domain)
+            } else {
+                ServerManager.updateActiveServerDomain(alreadyExisting.domain)
             }
+            return@withContext TunnelCreationResult(true, "Túnel já existente: ${alreadyExisting.domain}")
         }
 
+        // Verifica se atingiu o limite de túneis da conta Playit (máximo 4 no plano gratuito)
+        if (existingTunnels.size >= 4) {
+            val limitMsg = "Limite de túneis atingido na conta Playit (${existingTunnels.size}/4). Exclua um túnel no site para criar outro."
+            ServerManager.addLog(LogMessage("[Playit.gg] ⚠️ $limitMsg", LogType.WARN))
+            return@withContext TunnelCreationResult(false, limitMsg)
+        }
+
+        var agentId: String? = retrievedAgentId
         if (agentId == null) {
-            val rundata = fetchAgentRunData(secretKey)
-            agentId = rundata.first
+            val currentAgentUrl = agentUrl.value
+            if (!currentAgentUrl.isNullOrBlank()) {
+                val match = Regex("""agents/([a-zA-Z0-9\-]+)""").find(currentAgentUrl)
+                if (match != null) {
+                    agentId = match.groupValues[1]
+                }
+            }
         }
 
         if (agentId == null) {
@@ -508,7 +527,6 @@ object PlayitManager {
             return@withContext TunnelCreationResult(false, msg)
         }
 
-        val isBedrock = tunnelType.contains("bedrock", ignoreCase = true)
         val tTypeName = if (isBedrock) "minecraft-bedrock" else "minecraft-java"
         val displayName = if (isBedrock) "Minecraft Bedrock" else "Minecraft Java"
 
@@ -639,8 +657,21 @@ object PlayitManager {
                         if (arr != null) {
                             for (i in 0 until arr.length()) {
                                 val item = arr.getJSONObject(i)
-                                val domain = item.optString("assigned_domain", "").ifBlank {
-                                    item.optString("custom_domain", "")
+                                val domain = item.optString("display_address", "").ifBlank {
+                                    item.optString("assigned_domain", "").ifBlank {
+                                        item.optString("custom_domain", "").ifBlank {
+                                            val addrs = item.optJSONArray("connect_addresses")
+                                            if (addrs != null && addrs.length() > 0) {
+                                                val first = addrs.getJSONObject(0)
+                                                val v = first.optJSONObject("value")
+                                                val addr = v?.optString("address", "") ?: first.optString("address", "")
+                                                val port = v?.optInt("default_port", 0) ?: 0
+                                                if (addr.isNotBlank()) {
+                                                    if (port > 0 && !addr.contains(":")) "$addr:$port" else addr
+                                                } else ""
+                                            } else ""
+                                        }
+                                    }
                                 }
                                 val tType = item.optString("tunnel_type", "")
                                 val pType = item.optString("port_type", "")
@@ -782,7 +813,8 @@ object PlayitManager {
     }
 
     /**
-     * Garante que os túneis necessários (Java e/ou Bedrock) estejam provisionados na conta Playit
+     * Sincroniza túneis existentes da conta Playit com a interface do aplicativo.
+     * NUNCA cria túneis automaticamente em segundo plano para evitar ultrapassar o limite da conta.
      */
     suspend fun ensureTunnelsExist(
         context: Context,
@@ -793,23 +825,9 @@ object PlayitManager {
         if (savedSecret.isNullOrBlank()) return@withContext
 
         try {
-            // 1. Tenta consultar túneis existentes via API oficial
             val existing = fetchTunnelsViaApi(savedSecret)
-            val hasBedrock = existing.any { it.isBedrock }
-            val hasJava = existing.any { !it.isBedrock }
-
             existing.find { !it.isBedrock }?.let { ServerManager.updateActiveServerDomain(it.domain) }
             existing.find { it.isBedrock }?.let { ServerManager.updateActiveServerBedrockDomain(it.domain) }
-
-            var tunnelsCreated = false
-            if (needJava && !hasJava) {
-                val created = createTunnelViaApi(savedSecret, "minecraft-java", 25565)
-                if (created.success) tunnelsCreated = true
-            }
-            if (needBedrock && !hasBedrock) {
-                val created = createTunnelViaApi(savedSecret, "minecraft-bedrock", 19132)
-                if (created.success) tunnelsCreated = true
-            }
 
             // Fallback caso a API direta não tenha retornado
             if (existing.isEmpty()) {
@@ -818,20 +836,6 @@ object PlayitManager {
                     onJavaDomain = { jDomain -> ServerManager.updateActiveServerDomain(jDomain) },
                     onBedrockDomain = { bDomain -> ServerManager.updateActiveServerBedrockDomain(bDomain) }
                 )
-            }
-
-            // Se novos túneis foram criados e o processo do Playit já estava rodando,
-            // reinicia o processo para carregar os novos túneis imediatamente
-            if (tunnelsCreated && PlayitTunnelProcess.isRunning()) {
-                withContext(Dispatchers.Main) {
-                    PlayitTunnelProcess.stop()
-                    PlayitTunnelProcess.start(
-                        context = context,
-                        onLog = { msg -> ServerManager.addLog(msg) },
-                        onDomainFound = { d -> ServerManager.updateActiveServerDomain(d) },
-                        onBedrockDomainFound = { bd -> ServerManager.updateActiveServerBedrockDomain(bd) }
-                    )
-                }
             }
         } catch (e: Exception) {
             e.printStackTrace()
