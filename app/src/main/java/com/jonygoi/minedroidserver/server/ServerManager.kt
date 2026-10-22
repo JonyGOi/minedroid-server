@@ -172,6 +172,52 @@ object ServerManager {
         }
     }
 
+    fun adaptGeyserPort(newPort: Int, context: Context) {
+        scope.launch(Dispatchers.Main) {
+            val active = getActiveConfig() ?: return@launch
+            if (active.geyserPort != newPort && newPort in 1024..65535) {
+                addLog(LogMessage("[MineDroid] 🔄 Sincronizando porta do GeyserMC: ${active.geyserPort} ➔ $newPort (conforme túnel Playit)", LogType.SYSTEM))
+                val updated = active.copy(geyserPort = newPort)
+                val current = _servers.value.toMutableList()
+                val index = current.indexOfFirst { it.id == updated.id }
+                if (index != -1) {
+                    current[index] = updated
+                    _servers.value = current
+                }
+                ServerStorage.saveServers(context, current)
+                withContext(Dispatchers.IO) {
+                    val sDir = ServerInstaller.getServerDirectory(context, active.id)
+                    ServerInstaller.setupGeyserConfig(sDir, updated)
+                }
+
+                if (_state.value == ServerState.RUNNING || _state.value == ServerState.STARTING) {
+                    addLog(LogMessage("[MineDroid] 🔄 Reiniciando servidor para aplicar nova porta do GeyserMC ($newPort)...", LogType.WARN))
+                    restartServer(context)
+                }
+            }
+        }
+    }
+
+    fun restartServer(context: Context) {
+        scope.launch {
+            addLog(LogMessage("[MineDroid] 🔄 Reiniciando servidor...", LogType.SYSTEM))
+            processRunner?.stop()
+            var count = 0
+            while (_state.value != ServerState.STOPPED && count < 25) {
+                delay(400)
+                count++
+            }
+            if (_state.value != ServerState.STOPPED) {
+                processRunner?.kill()
+                _state.value = ServerState.STOPPED
+            }
+            delay(800)
+            withContext(Dispatchers.Main) {
+                startServer(context)
+            }
+        }
+    }
+
     fun deleteServer(context: Context, id: String) {
         if (_activeServerId.value == id && (_state.value != ServerState.STOPPED && _state.value != ServerState.ERROR)) {
             return

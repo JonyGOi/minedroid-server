@@ -63,6 +63,14 @@ fun DashboardScreen(
                             val bedrockTunnel = tunnels.find { it.isBedrock }
                             ServerManager.updateActiveServerDomain(javaTunnel?.domain ?: "")
                             ServerManager.updateActiveServerBedrockDomain(bedrockTunnel?.domain ?: "")
+
+                            bedrockTunnel?.let { bt ->
+                                val bPort = bt.domain.substringAfter(":", "").toIntOrNull()
+                                    ?: if (bt.localPort > 0 && bt.localPort != 25565) bt.localPort else null
+                                if (bPort != null) {
+                                    ServerManager.adaptGeyserPort(bPort, context)
+                                }
+                            }
                         }
                     }
                 }
@@ -785,6 +793,14 @@ fun DashboardScreen(
                                                                     val bedrockTunnel = tunnels.find { it.isBedrock }
                                                                     ServerManager.updateActiveServerDomain(javaTunnel?.domain ?: "")
                                                                     ServerManager.updateActiveServerBedrockDomain(bedrockTunnel?.domain ?: "")
+
+                                                                    bedrockTunnel?.let { bt ->
+                                                                        val bPort = bt.domain.substringAfter(":", "").toIntOrNull()
+                                                                            ?: if (bt.localPort > 0 && bt.localPort != 25565) bt.localPort else null
+                                                                        if (bPort != null) {
+                                                                            ServerManager.adaptGeyserPort(bPort, context)
+                                                                        }
+                                                                    }
                                                                     Toast.makeText(context, "Túneis sincronizados!", Toast.LENGTH_SHORT).show()
                                                                 }
                                                             }

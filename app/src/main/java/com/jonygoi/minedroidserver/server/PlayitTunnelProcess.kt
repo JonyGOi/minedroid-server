@@ -168,6 +168,21 @@ object PlayitTunnelProcess {
                                 assignedBedrockDomain = domain
                                 onLog(LogMessage("[Playit.gg] 📱 Túnel Bedrock ativo: $cleanMsg", LogType.SYSTEM))
                                 onBedrockDomainFound(domain)
+
+                                // Extrai a porta do túnel (local ou pública) e adapta o GeyserMC imediatamente
+                                val localTargetMatch = Regex("""=>\s*(?:[0-9\.]+):\s*(\d+)""").find(cleanMsg)
+                                val targetLocalPort = localTargetMatch?.groupValues?.get(1)?.toIntOrNull()
+                                val publicPort = domain.substringAfter(":", "").toIntOrNull()
+
+                                val effectivePort = when {
+                                    targetLocalPort != null && targetLocalPort != 25565 && targetLocalPort > 0 -> targetLocalPort
+                                    publicPort != null && publicPort != 25565 && publicPort > 0 -> publicPort
+                                    else -> null
+                                }
+
+                                if (effectivePort != null) {
+                                    ServerManager.adaptGeyserPort(effectivePort, context)
+                                }
                             } else if (isJava) {
                                 // Se o servidor ativo salvou indevidamente este domínio Java como Bedrock no passado, limpa o valor falso
                                 val activeConfig = ServerManager.getActiveConfig()

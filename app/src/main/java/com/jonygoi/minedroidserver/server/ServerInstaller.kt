@@ -302,12 +302,25 @@ object ServerInstaller {
 
             if (configFile.exists()) {
                 var text = configFile.readText()
-                text = text.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.geyserPort}")
-                text = text.replace(Regex("""(?m)^(\s*auth-type:\s*)\w+"""), "$1$authType")
-                if (!text.contains("clone-remote-port:")) {
-                    text = text.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  clone-remote-port: false")
+                val remoteIdx = text.indexOf("remote:")
+                if (remoteIdx != -1) {
+                    val bedrockPart = text.substring(0, remoteIdx)
+                    val remotePart = text.substring(remoteIdx)
+
+                    var updatedBedrock = bedrockPart.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.geyserPort}")
+                    if (!updatedBedrock.contains("clone-remote-port:")) {
+                        updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  clone-remote-port: false")
+                    } else {
+                        updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*clone-remote-port:\s*)true"""), "$1false")
+                    }
+
+                    var updatedRemote = remotePart.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.serverPort}")
+                    updatedRemote = updatedRemote.replace(Regex("""(?m)^(\s*auth-type:\s*)\w+"""), "$1$authType")
+
+                    text = updatedBedrock + updatedRemote
                 } else {
-                    text = text.replace(Regex("""(?m)^(\s*clone-remote-port:\s*)true"""), "$1false")
+                    text = text.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.geyserPort}")
+                    text = text.replace(Regex("""(?m)^(\s*auth-type:\s*)\w+"""), "$1$authType")
                 }
                 configFile.writeText(text)
             } else {
