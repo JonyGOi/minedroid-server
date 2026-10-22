@@ -411,128 +411,253 @@ object PlayitManager {
         val portType: String
     )
 
+    data class TunnelCreationResult(
+        val success: Boolean,
+        val errorReason: String? = null
+    )
+
     /**
-     * Cria um túnel diretamente na API do Playit.gg usando a chave de autenticação (Bearer Token)
+     * Consulta dados de execução do agente na API do Playit.gg
+     * Retorna o agent_id e a lista de túneis cadastrados
+     */
+    suspend fun fetchAgentRunData(secretKey: String): Pair<String?, List<TunnelDetails>> = withContext(Dispatchers.IO) {
+        if (secretKey.isBlank()) return@withContext Pair(null, emptyList())
+        val authHeaders = listOf("agent-key $secretKey", "Bearer $secretKey")
+        val endpoints = listOf("https://api.playit.gg/v1/agents/rundata")
+
+        for (endpoint in endpoints) {
+            for (auth in authHeaders) {
+                try {
+                    val url = URL(endpoint)
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
+                    conn.setRequestProperty("User-Agent", "playit-cli/0.15.26")
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Accept", "application/json")
+                    conn.setRequestProperty("Authorization", auth)
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+
+                    val code = conn.responseCode
+                    if (code in 200..299) {
+                        val res = conn.inputStream.bufferedReader().use { it.readText() }
+                        val json = JSONObject(res)
+                        val data = json.optJSONObject("data") ?: continue
+                        val agentId = data.optString("agent_id", "").ifBlank { null }
+                        if (agentId != null) {
+                            setAgentUrl("https://playit.gg/account/agents/$agentId")
+                        }
+
+                        val tunnelsList = mutableListOf<TunnelDetails>()
+                        val tunnelsArr = data.optJSONArray("tunnels")
+                        if (tunnelsArr != null) {
+                            for (i in 0 until tunnelsArr.length()) {
+                                val item = tunnelsArr.getJSONObject(i)
+                                val displayAddr = item.optString("display_address", "")
+                                val tunnelType = item.optString("tunnel_type", "")
+                                val portType = item.optString("port_type", "")
+                                val isB = tunnelType.contains("bedrock", ignoreCase = true) ||
+                                          portType.equals("udp", ignoreCase = true)
+                                if (displayAddr.isNotBlank()) {
+                                    tunnelsList.add(TunnelDetails(displayAddr, isB, if (isB) 19132 else 25565, portType))
+                                }
+                            }
+                        }
+                        return@withContext Pair(agentId, tunnelsList)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+        Pair(null, emptyList())
+    }
+
+    /**
+     * Cria um túnel diretamente na API do Playit.gg usando a chave de autenticação (agent-key)
      */
     suspend fun createTunnelViaApi(
         secretKey: String,
         tunnelType: String = "minecraft-bedrock",
         localPort: Int = 19132
-    ): Boolean = withContext(Dispatchers.IO) {
-        if (secretKey.isBlank()) return@withContext false
+    ): TunnelCreationResult = withContext(Dispatchers.IO) {
+        if (secretKey.isBlank()) {
+            return@withContext TunnelCreationResult(false, "Chave de autenticação não encontrada")
+        }
 
-        val endpoints = listOf(
-            "https://api.playit.gg/tunnels/create",
-            "https://api.playit.gg/v1/tunnels/create"
-        )
+        // 1. Obter agent_id
+        var agentId: String? = null
+        val currentAgentUrl = agentUrl.value
+        if (!currentAgentUrl.isNullOrBlank()) {
+            val match = Regex("""agents/([a-zA-Z0-9\-]+)""").find(currentAgentUrl)
+            if (match != null) {
+                agentId = match.groupValues[1]
+            }
+        }
+
+        if (agentId == null) {
+            val rundata = fetchAgentRunData(secretKey)
+            agentId = rundata.first
+        }
+
+        if (agentId == null) {
+            val msg = "Não foi possível obter o ID do agente no Playit"
+            ServerManager.addLog(LogMessage("[Playit.gg] ⚠️ $msg", LogType.ERROR))
+            return@withContext TunnelCreationResult(false, msg)
+        }
 
         val isBedrock = tunnelType.contains("bedrock", ignoreCase = true)
-        val name = if (isBedrock) "bedrock" else "java"
-        val portType = if (isBedrock) "udp" else "tcp"
+        val tTypeName = if (isBedrock) "minecraft-bedrock" else "minecraft-java"
+        val displayName = if (isBedrock) "Minecraft Bedrock" else "Minecraft Java"
 
         val body = JSONObject().apply {
-            put("name", name)
-            put("tunnel_type", tunnelType)
-            put("port_type", portType)
-            put("port_count", 1)
+            put("name", displayName)
+            put("protocol", JSONObject().apply {
+                put("type", "tunnel-type")
+                put("details", tTypeName)
+            })
             put("origin", JSONObject().apply {
-                put("type", "default")
+                put("type", "agent")
                 put("data", JSONObject().apply {
-                    put("local_ip", "127.0.0.1")
-                    put("local_port", localPort)
+                    put("agent_id", agentId)
+                    put("config", JSONObject())
+                })
+            })
+            put("endpoint", JSONObject().apply {
+                put("type", "region")
+                put("details", JSONObject().apply {
+                    put("region", "global")
+                    put("port", JSONObject.NULL)
                 })
             })
             put("enabled", true)
         }.toString()
 
+        val endpoints = listOf(
+            "https://api.playit.gg/v1/tunnels/create",
+            "https://api.playit.gg/tunnels/create"
+        )
+        val authHeaders = listOf("agent-key $secretKey", "Bearer $secretKey")
+
+        var lastError: String? = null
+
         for (endpoint in endpoints) {
-            try {
-                val url = URL(endpoint)
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.connectTimeout = 10000
-                conn.readTimeout = 10000
-                conn.setRequestProperty("User-Agent", "playit-cli/0.15.26")
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.setRequestProperty("Accept", "application/json")
-                conn.setRequestProperty("Authorization", "Bearer $secretKey")
-                conn.doOutput = true
+            for (auth in authHeaders) {
+                try {
+                    val url = URL(endpoint)
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.connectTimeout = 10000
+                    conn.readTimeout = 10000
+                    conn.setRequestProperty("User-Agent", "playit-cli/0.15.26")
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Accept", "application/json")
+                    conn.setRequestProperty("Authorization", auth)
+                    conn.doOutput = true
 
-                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                    conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
 
-                val code = conn.responseCode
-                val res = if (code in 200..299) {
-                    conn.inputStream.bufferedReader().use { it.readText() }
-                } else {
-                    conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                }
-
-                if (code in 200..299) {
-                    val json = JSONObject(res)
-                    if (json.optString("status") == "success") {
-                        return@withContext true
+                    val code = conn.responseCode
+                    val res = if (code in 200..299) {
+                        conn.inputStream.bufferedReader().use { it.readText() }
+                    } else {
+                        conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                     }
+
+                    if (code in 200..299) {
+                        val json = JSONObject(res)
+                        val status = json.optString("status", "")
+                        if (status == "success" || json.has("data")) {
+                            ServerManager.addLog(LogMessage("[Playit.gg] ✅ Túnel $displayName criado com sucesso via API!", LogType.SYSTEM))
+                            return@withContext TunnelCreationResult(true)
+                        }
+                    } else if (res.isNotBlank()) {
+                        try {
+                            val errJson = JSONObject(res)
+                            val dataObj = errJson.optJSONObject("data")
+                            val errType = dataObj?.optString("type") ?: errJson.optString("data")
+                            val errMsg = dataObj?.optString("message") ?: errType
+                            lastError = errMsg
+                            ServerManager.addLog(LogMessage("[Playit.gg] Resposta da API ao criar túnel ($code): $errMsg", LogType.WARN))
+                        } catch (_: Exception) {
+                            lastError = "HTTP $code"
+                        }
+                    }
+                } catch (e: Exception) {
+                    lastError = e.message
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
-        false
+
+        TunnelCreationResult(false, lastError ?: "Falha ao contatar a API do Playit")
     }
 
     /**
      * Consulta túneis existentes da conta diretamente na API do Playit.gg
      */
     suspend fun fetchTunnelsViaApi(secretKey: String): List<TunnelDetails> = withContext(Dispatchers.IO) {
-        val result = mutableListOf<TunnelDetails>()
-        if (secretKey.isBlank()) return@withContext result
+        if (secretKey.isBlank()) return@withContext emptyList()
 
+        // 1. Tenta via agents/rundata (método mais direto e rápido)
+        val rundata = fetchAgentRunData(secretKey)
+        if (rundata.second.isNotEmpty()) {
+            return@withContext rundata.second
+        }
+
+        // 2. Fallback via /v1/tunnels/list
+        val result = mutableListOf<TunnelDetails>()
         val endpoints = listOf(
-            "https://api.playit.gg/tunnels/list",
-            "https://api.playit.gg/v1/tunnels/list"
+            "https://api.playit.gg/v1/tunnels/list",
+            "https://api.playit.gg/tunnels/list"
         )
+        val authHeaders = listOf("agent-key $secretKey", "Bearer $secretKey")
 
         for (endpoint in endpoints) {
-            try {
-                val url = URL(endpoint)
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.connectTimeout = 8000
-                conn.readTimeout = 8000
-                conn.setRequestProperty("User-Agent", "playit-cli/0.15.26")
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.setRequestProperty("Accept", "application/json")
-                conn.setRequestProperty("Authorization", "Bearer $secretKey")
-                conn.doOutput = true
-                conn.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+            for (auth in authHeaders) {
+                try {
+                    val url = URL(endpoint)
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
+                    conn.setRequestProperty("User-Agent", "playit-cli/0.15.26")
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.setRequestProperty("Accept", "application/json")
+                    conn.setRequestProperty("Authorization", auth)
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
 
-                val code = conn.responseCode
-                if (code in 200..299) {
-                    val res = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = JSONObject(res)
-                    val dataObj = json.optJSONObject("data")
-                    val arr = dataObj?.optJSONArray("tunnels") ?: json.optJSONArray("data")
-                    if (arr != null) {
-                        for (i in 0 until arr.length()) {
-                            val item = arr.getJSONObject(i)
-                            val domain = item.optString("assigned_domain", "").ifBlank {
-                                item.optString("custom_domain", "")
+                    val code = conn.responseCode
+                    if (code in 200..299) {
+                        val res = conn.inputStream.bufferedReader().use { it.readText() }
+                        val json = JSONObject(res)
+                        val dataObj = json.optJSONObject("data")
+                        val arr = dataObj?.optJSONArray("tunnels") ?: json.optJSONArray("data")
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                val item = arr.getJSONObject(i)
+                                val domain = item.optString("assigned_domain", "").ifBlank {
+                                    item.optString("custom_domain", "")
+                                }
+                                val tType = item.optString("tunnel_type", "")
+                                val pType = item.optString("port_type", "")
+                                val lPort = item.optInt("local_port", 0)
+                                val isB = tType.contains("bedrock", ignoreCase = true) ||
+                                          pType.equals("udp", ignoreCase = true) ||
+                                          lPort == 19132
+                                if (domain.isNotBlank()) {
+                                    result.add(TunnelDetails(domain, isB, lPort, pType))
+                                }
                             }
-                            val tType = item.optString("tunnel_type", "")
-                            val pType = item.optString("port_type", "")
-                            val lPort = item.optInt("local_port", 0)
-                            val isB = tType.contains("bedrock", ignoreCase = true) ||
-                                      pType.equals("udp", ignoreCase = true) ||
-                                      lPort == 19132
-                            if (domain.isNotBlank()) {
-                                result.add(TunnelDetails(domain, isB, lPort, pType))
-                            }
+                            if (result.isNotEmpty()) return@withContext result
                         }
-                        if (result.isNotEmpty()) break
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
         result
@@ -548,7 +673,7 @@ object PlayitManager {
 
         if (!savedSecret.isNullOrBlank()) {
             val apiOk = createTunnelViaApi(savedSecret, tunnelType, localPort)
-            if (apiOk) return@withContext true
+            if (apiOk.success) return@withContext true
         }
 
         val playitBin = File(context.applicationInfo.nativeLibraryDir, "libplayit.so")
@@ -679,11 +804,11 @@ object PlayitManager {
             var tunnelsCreated = false
             if (needJava && !hasJava) {
                 val created = createTunnelViaApi(savedSecret, "minecraft-java", 25565)
-                if (created) tunnelsCreated = true
+                if (created.success) tunnelsCreated = true
             }
             if (needBedrock && !hasBedrock) {
                 val created = createTunnelViaApi(savedSecret, "minecraft-bedrock", 19132)
-                if (created) tunnelsCreated = true
+                if (created.success) tunnelsCreated = true
             }
 
             // Fallback caso a API direta não tenha retornado

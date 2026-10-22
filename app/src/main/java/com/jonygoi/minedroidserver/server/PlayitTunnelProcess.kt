@@ -221,7 +221,7 @@ object PlayitTunnelProcess {
                                 if (!secret.isNullOrBlank()) {
                                     processScope?.launch {
                                         val ok = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
-                                        if (ok) {
+                                        if (ok.success) {
                                             onLog(LogMessage("[Playit.gg] ⚡ Túnel Bedrock provisionado via API com sucesso! Reiniciando agente...", LogType.SYSTEM))
                                             delay(1500)
                                             withContext(Dispatchers.Main) {

@@ -699,11 +699,16 @@ fun DashboardScreen(
                                                         if (!secret.isNullOrBlank()) {
                                                              isCreatingTunnel = true
                                                              coroutineScope.launch(Dispatchers.IO) {
-                                                                 val ok = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
+                                                                 val result = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
                                                                  withContext(Dispatchers.Main) {
                                                                      isCreatingTunnel = false
-                                                                     if (ok) {
-                                                                         Toast.makeText(context, "Túnel Bedrock criado com sucesso! Reiniciando agente...", Toast.LENGTH_SHORT).show()
+                                                                     if (result.success) {
+                                                                         Toast.makeText(context, "Túnel Bedrock criado com sucesso!", Toast.LENGTH_SHORT).show()
+                                                                         val tunnels = PlayitManager.fetchTunnelsViaApi(secret)
+                                                                         val bedrock = tunnels.find { it.isBedrock }
+                                                                         if (bedrock != null) {
+                                                                             ServerManager.updateActiveServerBedrockDomain(bedrock.domain)
+                                                                         }
                                                                          PlayitTunnelProcess.stop()
                                                                          PlayitTunnelProcess.start(
                                                                              context = context,
@@ -712,7 +717,15 @@ fun DashboardScreen(
                                                                              onBedrockDomainFound = { bd -> ServerManager.updateActiveServerBedrockDomain(bd) }
                                                                          )
                                                                      } else {
-                                                                         Toast.makeText(context, "Não foi possível criar automaticamente. Abra o painel playit.gg", Toast.LENGTH_LONG).show()
+                                                                         val reason = result.errorReason ?: "Erro na API do Playit"
+                                                                         Toast.makeText(context, "Playit: $reason. Abrindo painel...", Toast.LENGTH_LONG).show()
+                                                                         try {
+                                                                             val target = agentUrl ?: "https://playit.gg/account/tunnels"
+                                                                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target)).apply {
+                                                                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                                             }
+                                                                             context.startActivity(intent)
+                                                                         } catch (_: Exception) {}
                                                                      }
                                                                  }
                                                              }
