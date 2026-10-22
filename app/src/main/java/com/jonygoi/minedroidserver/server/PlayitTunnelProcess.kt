@@ -100,6 +100,7 @@ object PlayitTunnelProcess {
                 var initialStatusLogged = false
                 var assignedJavaDomain: String? = null
                 var assignedBedrockDomain: String? = null
+                var hasLoggedNoTunnelsNotice = false
 
                 while (reader.readLine().also { line = it } != null) {
                     val rawMsg = line ?: continue
@@ -113,6 +114,24 @@ object PlayitTunnelProcess {
                         onLog(LogMessage("[Playit.gg] 🔗 Autorize seu servidor no navegador: $claimUrl", LogType.WARN))
                         onClaimUrlFound(claimUrl)
                         PlayitManager.setLiveClaimUrl(claimUrl)
+                    }
+
+                    // 1.5. Detectar aviso do Playit de que o agente não possui túneis cadastrados
+                    if (cleanMsg.contains("Add tunnels here:", ignoreCase = true)) {
+                        val agentMatch = Regex("""https://playit\.gg/account/agents/([a-zA-Z0-9\-]+)""").find(cleanMsg)
+                        if (agentMatch != null) {
+                            val agentUrl = agentMatch.value
+                            PlayitManager.setAgentUrl(agentUrl)
+                            if (!hasLoggedNoTunnelsNotice) {
+                                hasLoggedNoTunnelsNotice = true
+                                onLog(LogMessage("[Playit.gg] ℹ️ Nenhum túnel ativo no momento nesta conta Playit.", LogType.WARN))
+                                onLog(LogMessage("[Playit.gg] 🔗 Configure os túneis (Java e Bedrock) em: $agentUrl", LogType.SYSTEM))
+                                // Limpa domínios residuais anteriores da interface
+                                ServerManager.updateActiveServerDomain("")
+                                ServerManager.updateActiveServerBedrockDomain("")
+                            }
+                        }
+                        continue
                     }
 
                     // Sincroniza a chave se o agente foi aprovado na web
@@ -180,7 +199,8 @@ object PlayitTunnelProcess {
                     // 3. Filtrar atualizações periódicas repetitivas da interface TUI do Playit (evita flood no console)
                     val isTuiHeartbeat = cleanMsg.contains("tunnel running,", ignoreCase = true) ||
                                          cleanMsg.equals("TUNNELS", ignoreCase = true) ||
-                                         cleanMsg.contains("doing auto run", ignoreCase = true)
+                                         cleanMsg.contains("doing auto run", ignoreCase = true) ||
+                                         cleanMsg.contains("Add tunnels here", ignoreCase = true)
 
                     if (isTuiHeartbeat) {
                         // Loga apenas a primeira confirmação de inicialização do túnel

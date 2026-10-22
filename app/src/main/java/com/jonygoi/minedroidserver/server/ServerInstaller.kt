@@ -250,6 +250,7 @@ object ServerInstaller {
             appendLine("simulation-distance=${config.simulationDistance}")
             appendLine("sync-chunk-writes=false")
             appendLine("network-compression-threshold=256")
+            appendLine("transport=raknet")
         }.toString()
         propsFile.writeText(content)
     }

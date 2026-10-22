@@ -138,9 +138,17 @@ object ServerManager {
             val active = getActiveConfig() ?: return@launch
             if (active.customDomain != domain) {
                 val updated = active.copy(customDomain = domain)
+                val current = _servers.value.toMutableList()
+                val index = current.indexOfFirst { it.id == updated.id }
+                if (index != -1) {
+                    current[index] = updated
+                    _servers.value = current
+                }
                 appContext?.let { ctx ->
-                    updateServer(ctx, updated)
-                    PlayitManager.saveLastKnownDomain(ctx, domain)
+                    ServerStorage.saveServers(ctx, current)
+                    if (domain.isNotBlank()) {
+                        PlayitManager.saveLastKnownDomain(ctx, domain)
+                    }
                 }
             }
         }
@@ -151,8 +159,14 @@ object ServerManager {
             val active = getActiveConfig() ?: return@launch
             if (active.bedrockDomain != domain) {
                 val updated = active.copy(bedrockDomain = domain)
+                val current = _servers.value.toMutableList()
+                val index = current.indexOfFirst { it.id == updated.id }
+                if (index != -1) {
+                    current[index] = updated
+                    _servers.value = current
+                }
                 appContext?.let { ctx ->
-                    updateServer(ctx, updated)
+                    ServerStorage.saveServers(ctx, current)
                 }
             }
         }
@@ -198,6 +212,12 @@ object ServerManager {
         }
 
         val cfg = getActiveConfig() ?: return
+
+        // Se o túnel Playit estiver ativo, limpa domínios de sessões antigas para aguardar os novos túneis reais
+        if (cfg.enablePlayitTunnel) {
+            val sessionCleanConfig = cfg.copy(customDomain = "", bedrockDomain = "")
+            updateServer(context, sessionCleanConfig)
+        }
 
         // Start Foreground Service
         val serviceIntent = Intent(context, MinecraftServerService::class.java).apply {

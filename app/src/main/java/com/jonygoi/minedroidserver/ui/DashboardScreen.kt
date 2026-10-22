@@ -47,7 +47,32 @@ fun DashboardScreen(
     val downloadProg by ServerManager.downloadProgress.collectAsState()
     val logs by ServerManager.logs.collectAsState()
     val liveClaimUrl by PlayitManager.liveClaimUrl.collectAsState()
+    val agentUrl by PlayitManager.agentUrl.collectAsState()
     val isPlayitRunning by PlayitTunnelProcess.isRunningFlow.collectAsState()
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                val secret = PlayitManager.getSavedSecretKey(context)
+                if (!secret.isNullOrBlank() && isPlayitRunning) {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        val tunnels = PlayitManager.fetchTunnelsViaApi(secret)
+                        withContext(Dispatchers.Main) {
+                            val javaTunnel = tunnels.find { !it.isBedrock }
+                            val bedrockTunnel = tunnels.find { it.isBedrock }
+                            ServerManager.updateActiveServerDomain(javaTunnel?.domain ?: "")
+                            ServerManager.updateActiveServerBedrockDomain(bedrockTunnel?.domain ?: "")
+                        }
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var serverToDelete by remember { mutableStateOf<ServerConfig?>(null) }
@@ -597,26 +622,26 @@ fun DashboardScreen(
                                                 OutlinedButton(
                                                     onClick = {
                                                         copyToClipboard(context, bHost)
-                                                        Toast.makeText(context, "IP Bedrock copiado: $bHost", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "IP Bedrock copiado!", Toast.LENGTH_SHORT).show()
                                                     },
                                                     shape = RoundedCornerShape(6.dp),
                                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                                     modifier = Modifier.weight(1f).height(28.dp),
                                                     border = BorderStroke(1.dp, MinecraftBorder)
                                                 ) {
-                                                    Text("Copiar IP: $bHost", fontSize = 10.sp, color = TextSecondary, maxLines = 1)
+                                                    Text("📋 Copiar IP", fontSize = 10.sp, color = TextSecondary, maxLines = 1)
                                                 }
                                                 OutlinedButton(
                                                     onClick = {
                                                         copyToClipboard(context, bPort)
-                                                        Toast.makeText(context, "Porta Bedrock copiada: $bPort", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "Porta copiada: $bPort", Toast.LENGTH_SHORT).show()
                                                     },
                                                     shape = RoundedCornerShape(6.dp),
                                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                                     modifier = Modifier.weight(0.6f).height(28.dp),
                                                     border = BorderStroke(1.dp, MinecraftBorder)
                                                 ) {
-                                                    Text("Porta: $bPort", fontSize = 10.sp, color = MinecraftEmerald, maxLines = 1)
+                                                    Text("📋 Porta: $bPort", fontSize = 10.sp, color = MinecraftEmerald, maxLines = 1)
                                                 }
                                             }
                                         }
@@ -651,7 +676,10 @@ fun DashboardScreen(
                                                 Button(
                                                     onClick = {
                                                         try {
-                                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://playit.gg/account/tunnels"))
+                                                            val target = agentUrl ?: "https://playit.gg/account/tunnels"
+                                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target)).apply {
+                                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                            }
                                                             context.startActivity(intent)
                                                         } catch (_: Exception) {}
                                                     },
@@ -669,25 +697,25 @@ fun DashboardScreen(
                                                     onClick = {
                                                         val secret = savedSecret
                                                         if (!secret.isNullOrBlank()) {
-                                                            isCreatingTunnel = true
-                                                            coroutineScope.launch(Dispatchers.IO) {
-                                                                val ok = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
-                                                                withContext(Dispatchers.Main) {
-                                                                    isCreatingTunnel = false
-                                                                    if (ok) {
-                                                                        Toast.makeText(context, "Túnel Bedrock criado com sucesso! Reiniciando agente...", Toast.LENGTH_SHORT).show()
-                                                                        PlayitTunnelProcess.stop()
-                                                                        PlayitTunnelProcess.start(
-                                                                            context = context,
-                                                                            onLog = { msg -> ServerManager.addLog(msg) },
-                                                                            onDomainFound = { d -> ServerManager.updateActiveServerDomain(d) },
-                                                                            onBedrockDomainFound = { bd -> ServerManager.updateActiveServerBedrockDomain(bd) }
-                                                                        )
-                                                                    } else {
-                                                                        Toast.makeText(context, "Não foi possível criar automaticamente. Abra o painel playit.gg", Toast.LENGTH_LONG).show()
-                                                                    }
-                                                                }
-                                                            }
+                                                             isCreatingTunnel = true
+                                                             coroutineScope.launch(Dispatchers.IO) {
+                                                                 val ok = PlayitManager.createTunnelViaApi(secret, "minecraft-bedrock", 19132)
+                                                                 withContext(Dispatchers.Main) {
+                                                                     isCreatingTunnel = false
+                                                                     if (ok) {
+                                                                         Toast.makeText(context, "Túnel Bedrock criado com sucesso! Reiniciando agente...", Toast.LENGTH_SHORT).show()
+                                                                         PlayitTunnelProcess.stop()
+                                                                         PlayitTunnelProcess.start(
+                                                                             context = context,
+                                                                             onLog = { msg -> ServerManager.addLog(msg) },
+                                                                             onDomainFound = { d -> ServerManager.updateActiveServerDomain(d) },
+                                                                             onBedrockDomainFound = { bd -> ServerManager.updateActiveServerBedrockDomain(bd) }
+                                                                         )
+                                                                     } else {
+                                                                         Toast.makeText(context, "Não foi possível criar automaticamente. Abra o painel playit.gg", Toast.LENGTH_LONG).show()
+                                                                     }
+                                                                 }
+                                                             }
                                                         } else {
                                                             Toast.makeText(context, "Vincule sua conta Playit primeiro!", Toast.LENGTH_SHORT).show()
                                                         }
@@ -699,9 +727,9 @@ fun DashboardScreen(
                                                     modifier = Modifier.weight(1f).height(30.dp)
                                                 ) {
                                                     if (isCreatingTunnel) {
-                                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MinecraftObsidian)
+                                                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MinecraftObsidian)
                                                     } else {
-                                                        Text("Criar Automático", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MinecraftObsidian)
+                                                         Text("Criar Automático", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MinecraftObsidian)
                                                     }
                                                 }
                                             }
@@ -712,6 +740,7 @@ fun DashboardScreen(
                                 // Status do Túnel Playit.gg
                                 if (s.enablePlayitTunnel) {
                                     HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+                                    var isSyncingTunnels by remember { mutableStateOf(false) }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -729,6 +758,34 @@ fun DashboardScreen(
                                                 fontSize = 11.sp,
                                                 color = if (isPlayitRunning) MinecraftEmerald else TextSecondary
                                             )
+                                            if (isPlayitRunning && !savedSecret.isNullOrBlank()) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                IconButton(
+                                                    onClick = {
+                                                        if (!isSyncingTunnels) {
+                                                            isSyncingTunnels = true
+                                                            coroutineScope.launch(Dispatchers.IO) {
+                                                                val tunnels = PlayitManager.fetchTunnelsViaApi(savedSecret)
+                                                                withContext(Dispatchers.Main) {
+                                                                    isSyncingTunnels = false
+                                                                    val javaTunnel = tunnels.find { !it.isBedrock }
+                                                                    val bedrockTunnel = tunnels.find { it.isBedrock }
+                                                                    ServerManager.updateActiveServerDomain(javaTunnel?.domain ?: "")
+                                                                    ServerManager.updateActiveServerBedrockDomain(bedrockTunnel?.domain ?: "")
+                                                                    Toast.makeText(context, "Túneis sincronizados!", Toast.LENGTH_SHORT).show()
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    if (isSyncingTunnels) {
+                                                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = MinecraftEmerald)
+                                                    } else {
+                                                        Icon(Icons.Default.Refresh, contentDescription = "Sincronizar Túneis", tint = TextSecondary, modifier = Modifier.size(14.dp))
+                                                    }
+                                                }
+                                            }
                                         }
 
                                         if (savedSecret.isNullOrBlank()) {

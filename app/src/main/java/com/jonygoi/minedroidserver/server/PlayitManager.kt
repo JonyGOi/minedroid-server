@@ -36,10 +36,17 @@ object PlayitManager {
     private var activePollerJob: Job? = null
 
     val liveClaimUrl = MutableStateFlow<String?>(null)
+    val agentUrl = MutableStateFlow<String?>(null)
 
     fun setLiveClaimUrl(url: String?) {
         liveClaimUrl.value = url
     }
+
+    fun setAgentUrl(url: String?) {
+        agentUrl.value = url
+    }
+
+    fun getAgentUrl(): String? = agentUrl.value
 
     fun resetSecret(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
