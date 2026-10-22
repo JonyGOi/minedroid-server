@@ -215,13 +215,19 @@ object PlayitTunnelProcess {
                             initialStatusLogged = true
                             onLog(LogMessage("[Playit.gg] ✅ Túnel conectado e em execução com sucesso!", LogType.SYSTEM))
 
-                            // Se o servidor ativo exige Bedrock (Geyser ou Proxy Standalone) e nenhum túnel Bedrock UDP foi encontrado
+                            // Aguarda alguns segundos para receber os mapeamentos de túnel antes de alertar
                             val activeCfg = ServerManager.getActiveConfig()
                             val needsBedrock = activeCfg?.enableGeyser == true || activeCfg?.serverType == ServerType.GEYSER_STANDALONE
-                            if (needsBedrock && assignedBedrockDomain == null) {
-                                onLog(LogMessage("[Playit.gg] ⚠️ ATENÇÃO BEDROCK: Nenhum túnel Bedrock (UDP :19132) foi detectado na sua conta Playit!", LogType.WARN))
-                                onLog(LogMessage("[Playit.gg] ⚠️ Seus túneis ativos são apenas Java (TCP :25565). O GeyserMC está ouvindo localmente na UDP :19132, mas precisa de um túnel Bedrock no Playit para receber conexões externas pelo celular.", LogType.WARN))
-                                onLog(LogMessage("[Playit.gg] 👉 Acesse https://playit.gg/account/tunnels e altere o túnel para 'Minecraft Bedrock' (UDP :19132), ou clique em 'Criar Automático' no app.", LogType.WARN))
+                            if (needsBedrock) {
+                                processScope?.launch {
+                                    delay(4000)
+                                    val currentCfg = ServerManager.getActiveConfig()
+                                    if (assignedBedrockDomain == null && (currentCfg?.bedrockDomain.isNullOrBlank())) {
+                                        onLog(LogMessage("[Playit.gg] ⚠️ ATENÇÃO BEDROCK: Nenhum túnel Bedrock ativo detectado na sua conta Playit!", LogType.WARN))
+                                        onLog(LogMessage("[Playit.gg] ⚠️ Seus túneis ativos são apenas Java. O GeyserMC precisa de um túnel Bedrock no Playit para receber conexões externas pelo celular.", LogType.WARN))
+                                        onLog(LogMessage("[Playit.gg] 👉 Acesse https://playit.gg/account/tunnels e crie um túnel Bedrock, ou clique em 'Criar Automático' no app.", LogType.WARN))
+                                    }
+                                }
                             }
                         }
                         continue

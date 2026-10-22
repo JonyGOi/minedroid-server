@@ -157,8 +157,11 @@ object ServerManager {
     fun updateActiveServerBedrockDomain(domain: String) {
         scope.launch(Dispatchers.Main) {
             val active = getActiveConfig() ?: return@launch
-            if (active.bedrockDomain != domain) {
-                val updated = active.copy(bedrockDomain = domain)
+            val portFromDomain = domain.substringAfter(":", "").toIntOrNull()
+            val newGeyserPort = if (portFromDomain != null && portFromDomain in 1024..65535) portFromDomain else active.geyserPort
+
+            if (active.bedrockDomain != domain || active.geyserPort != newGeyserPort) {
+                val updated = active.copy(bedrockDomain = domain, geyserPort = newGeyserPort)
                 val current = _servers.value.toMutableList()
                 val index = current.indexOfFirst { it.id == updated.id }
                 if (index != -1) {
@@ -167,6 +170,10 @@ object ServerManager {
                 }
                 appContext?.let { ctx ->
                     ServerStorage.saveServers(ctx, current)
+                    withContext(Dispatchers.IO) {
+                        val sDir = ServerInstaller.getServerDirectory(ctx, active.id)
+                        ServerInstaller.setupGeyserConfig(sDir, updated)
+                    }
                 }
             }
         }
@@ -257,12 +264,19 @@ object ServerManager {
             _activeServerId.value = targetServerId
         }
 
-        val cfg = getActiveConfig() ?: return
+        var cfg = getActiveConfig() ?: return
 
-        // Se o túnel Playit estiver ativo, limpa domínios de sessões antigas para aguardar os novos túneis reais
-        if (cfg.enablePlayitTunnel) {
-            val sessionCleanConfig = cfg.copy(customDomain = "", bedrockDomain = "")
-            updateServer(context, sessionCleanConfig)
+        // 0. Sincroniza a porta do GeyserMC com a porta do túnel Bedrock já conhecido
+        val knownBedrockPort = cfg.bedrockDomain.substringAfter(":", "").toIntOrNull()
+        if (knownBedrockPort != null && knownBedrockPort in 1024..65535 && cfg.geyserPort != knownBedrockPort) {
+            cfg = cfg.copy(geyserPort = knownBedrockPort)
+            val current = _servers.value.toMutableList()
+            val index = current.indexOfFirst { it.id == cfg.id }
+            if (index != -1) {
+                current[index] = cfg
+                _servers.value = current
+            }
+            ServerStorage.saveServers(context, current)
         }
 
         // Start Foreground Service

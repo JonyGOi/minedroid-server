@@ -190,6 +190,12 @@ object ServerInstaller {
                 PlayitManager.ensureTunnelsExist(context, needJava = needJava, needBedrock = needBedrock)
             }
 
+            // Sincroniza configuração final do GeyserMC com as portas e domínios Playit mais recentes
+            val activeLatest = ServerManager.getActiveConfig() ?: config
+            if (activeLatest.enableGeyser || activeLatest.serverType == ServerType.GEYSER_STANDALONE) {
+                setupGeyserConfig(serverDir, activeLatest)
+            }
+
             // Limpeza: remove qualquer resquício do plugin antigo do playit na pasta plugins.
             // O MineDroid utiliza o motor nativo libplayit.so em segundo plano no app, tornando desnecessário
             // e redundante o plugin dentro do Minecraft (que causava avisos de 'check logs to claim' no chat do jogo).
@@ -208,7 +214,7 @@ object ServerInstaller {
             // Garante que permissions.yml não cause ClassCastException no Bukkit/Paper
             try {
                 val permFile = File(serverDir, "permissions.yml")
-                if (!permFile.exists() || permFile.length() < 5L || permFile.readText().contains("[]")) {
+                if (!permFile.exists() || permFile.length() < 10L || permFile.readText().let { it.contains("[]") || it.contains("default-permissions") }) {
                     permFile.writeText("# Permissions file for MineDroid Server\n")
                 }
             } catch (_: Exception) {}
@@ -290,6 +296,11 @@ object ServerInstaller {
             }
             if (!geyserDir.exists()) geyserDir.mkdirs()
 
+            val effectiveGeyserPort = run {
+                val fromDomain = config.bedrockDomain.substringAfter(":", "").toIntOrNull()
+                if (fromDomain != null && fromDomain in 1024..65535) fromDomain else config.geyserPort
+            }
+
             val configFile = File(geyserDir, "config.yml")
             val authType = when {
                 config.serverType == ServerType.GEYSER_STANDALONE -> "offline"
@@ -307,11 +318,21 @@ object ServerInstaller {
                     val bedrockPart = text.substring(0, remoteIdx)
                     val remotePart = text.substring(remoteIdx)
 
-                    var updatedBedrock = bedrockPart.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.geyserPort}")
+                    var updatedBedrock = bedrockPart.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1$effectiveGeyserPort")
                     if (!updatedBedrock.contains("clone-remote-port:")) {
                         updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  clone-remote-port: false")
                     } else {
                         updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*clone-remote-port:\s*)true"""), "$1false")
+                    }
+
+                    if (!updatedBedrock.contains(Regex("""(?m)^\s*transport:\s*"""))) {
+                        if (updatedBedrock.contains("clone-remote-port:")) {
+                            updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*clone-remote-port:\s*\w+)"""), "$1\n  transport: both")
+                        } else {
+                            updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  transport: both")
+                        }
+                    } else {
+                        updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*transport:\s*)\w+"""), "$1both")
                     }
 
                     var updatedRemote = remotePart.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.serverPort}")
@@ -319,8 +340,13 @@ object ServerInstaller {
 
                     text = updatedBedrock + updatedRemote
                 } else {
-                    text = text.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.geyserPort}")
+                    text = text.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1$effectiveGeyserPort")
                     text = text.replace(Regex("""(?m)^(\s*auth-type:\s*)\w+"""), "$1$authType")
+                    if (!text.contains(Regex("""(?m)^\s*transport:\s*"""))) {
+                        text = text.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  transport: both")
+                    } else {
+                        text = text.replace(Regex("""(?m)^(\s*transport:\s*)\w+"""), "$1both")
+                    }
                 }
                 configFile.writeText(text)
             } else {
@@ -329,8 +355,9 @@ object ServerInstaller {
                     appendLine("# Configuração GeyserMC gerada automaticamente pelo MineDroid Server")
                     appendLine("bedrock:")
                     appendLine("  address: 0.0.0.0")
-                    appendLine("  port: ${config.geyserPort}")
+                    appendLine("  port: $effectiveGeyserPort")
                     appendLine("  clone-remote-port: false")
+                    appendLine("  transport: both")
                     appendLine("  motd1: \"$cleanName\"")
                     appendLine("  motd2: \"MineDroid Bedrock Crossplay\"")
                     appendLine("remote:")
