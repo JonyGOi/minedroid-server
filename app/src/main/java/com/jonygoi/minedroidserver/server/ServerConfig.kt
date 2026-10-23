@@ -52,7 +52,8 @@ data class ServerConfig(
     val spawnNpcs: Boolean = true,
     val whiteList: Boolean = false,
     val enableCommandBlock: Boolean = true,
-    val spawnProtection: Int = 0
+    val spawnProtection: Int = 0,
+    val geyserTransport: String = "raknet"
 ) {
     val friendlyJavaAddress: String
         get() = when {

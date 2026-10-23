@@ -65,6 +65,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
     var ramMb by remember(currentConfig) { mutableFloatStateOf(currentConfig.allocatedRamMb.toFloat()) }
     var enableGeyser by remember(currentConfig) { mutableStateOf(currentConfig.enableGeyser) }
     var enableFloodgate by remember(currentConfig) { mutableStateOf(currentConfig.enableFloodgate) }
+    var geyserTransport by remember(currentConfig) { mutableStateOf(currentConfig.geyserTransport) }
     var enableAikar by remember(currentConfig) { mutableStateOf(currentConfig.enableAikarFlags) }
     var onlineMode by remember(currentConfig) { mutableStateOf(currentConfig.onlineMode) }
     var pvp by remember(currentConfig) { mutableStateOf(currentConfig.pvp) }
@@ -782,6 +783,38 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Reparar Chaves de Criptografia Bedrock", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Protocolo de Transporte Bedrock (NetherNet / RakNet)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text(
+                            text = "O Playit.gg opera via RakNet (UDP). Caso queira desativar o aviso do console e testar o NetherNet diretamente, selecione abaixo:",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = geyserTransport == "raknet",
+                                onClick = { geyserTransport = "raknet" },
+                                label = { Text("RakNet (Recomendado Playit)") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MinecraftEmerald,
+                                    selectedLabelColor = MinecraftObsidian,
+                                    containerColor = MinecraftCardSurface,
+                                    labelColor = TextPrimary
+                                )
+                            )
+                            FilterChip(
+                                selected = geyserTransport == "nethernet",
+                                onClick = { geyserTransport = "nethernet" },
+                                label = { Text("NetherNet") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MinecraftEmerald,
+                                    selectedLabelColor = MinecraftObsidian,
+                                    containerColor = MinecraftCardSurface,
+                                    labelColor = TextPrimary
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -878,6 +911,7 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     allocatedRamMb = ramMb.toInt(),
                     enableGeyser = enableGeyser,
                     enableFloodgate = enableFloodgate,
+                    geyserTransport = geyserTransport,
                     enableAikarFlags = enableAikar,
                     onlineMode = onlineMode,
                     pvp = pvp,

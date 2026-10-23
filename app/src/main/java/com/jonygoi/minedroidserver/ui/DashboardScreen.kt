@@ -357,24 +357,8 @@ fun DashboardScreen(
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onNavigateToRemote,
-                    modifier = Modifier
-                        .size(38.dp)
-                        .background(MinecraftCardSurface, RoundedCornerShape(10.dp))
-                        .border(1.dp, MinecraftBorder, RoundedCornerShape(10.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Devices,
-                        contentDescription = "Acessar Celular Remoto",
-                        tint = MinecraftDiamond,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Button(
-                    onClick = { showCreateDialog = true },
+            Button(
+                onClick = { showCreateDialog = true },
                     colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
@@ -382,7 +366,6 @@ fun DashboardScreen(
                     Icon(Icons.Default.Add, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Novo Servidor", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
             }
         }
 
@@ -783,42 +766,6 @@ fun DashboardScreen(
                                 }
 
                                 HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
-
-                                // Dica: Jogando neste mesmo celular (Host Local)
-                                Surface(
-                                    color = MinecraftDarkSurface.copy(alpha = 0.6f),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, MinecraftBorder.copy(alpha = 0.6f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Info, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Jogando neste mesmo celular (Host Local):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MinecraftDiamond)
-                                        }
-                                        Text(
-                                            text = "O Android bloqueia conexão com o túnel externo no próprio aparelho. Para jogar neste celular, use IP: 127.0.0.1 e Porta: ${s.geyserPort} (Bedrock) ou ${s.serverPort} (Java).",
-                                            fontSize = 10.sp,
-                                            color = TextSecondary,
-                                            lineHeight = 14.sp
-                                        )
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    copyToClipboard(context, "127.0.0.1:${s.geyserPort}")
-                                                    Toast.makeText(context, "Copiado: 127.0.0.1:${s.geyserPort}", Toast.LENGTH_SHORT).show()
-                                                },
-                                                shape = RoundedCornerShape(6.dp),
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(26.dp),
-                                                border = BorderStroke(1.dp, MinecraftBorder)
-                                            ) {
-                                                Text("📋 Copiar 127.0.0.1:${s.geyserPort}", fontSize = 10.sp, color = MinecraftEmerald)
-                                            }
-                                        }
-                                    }
-                                }
 
                                 // Status do Túnel Playit.gg
                                 if (s.enablePlayitTunnel) {

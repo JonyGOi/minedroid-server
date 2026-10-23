@@ -75,7 +75,8 @@ object ServerStorage {
                         spawnNpcs = obj.optBoolean("spawnNpcs", true),
                         whiteList = obj.optBoolean("whiteList", false),
                         enableCommandBlock = obj.optBoolean("enableCommandBlock", true),
-                        spawnProtection = obj.optInt("spawnProtection", 0)
+                        spawnProtection = obj.optInt("spawnProtection", 0),
+                        geyserTransport = obj.optString("geyserTransport", "raknet")
                     )
                 )
             }
@@ -127,6 +128,7 @@ object ServerStorage {
                     put("whiteList", s.whiteList)
                     put("enableCommandBlock", s.enableCommandBlock)
                     put("spawnProtection", s.spawnProtection)
+                    put("geyserTransport", s.geyserTransport)
                 }
                 jsonArray.put(obj)
             }
