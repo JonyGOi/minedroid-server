@@ -369,12 +369,12 @@ object ServerInstaller {
 
                     if (!updatedBedrock.contains(Regex("""(?m)^\s*transport:\s*"""))) {
                         if (updatedBedrock.contains("clone-remote-port:")) {
-                            updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*clone-remote-port:\s*\w+)"""), "$1\n  transport: both")
+                            updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*clone-remote-port:\s*\w+)"""), "$1\n  transport: raknet")
                         } else {
-                            updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  transport: both")
+                            updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  transport: raknet")
                         }
                     } else {
-                        updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*transport:\s*)\w+"""), "$1both")
+                        updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*transport:\s*)\w+"""), "$1raknet")
                     }
 
                     var updatedRemote = remotePart.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1${config.serverPort}")
@@ -385,9 +385,9 @@ object ServerInstaller {
                     text = text.replace(Regex("""(?m)^(\s*port:\s*)\d+"""), "$1$effectiveGeyserPort")
                     text = text.replace(Regex("""(?m)^(\s*auth-type:\s*)\w+"""), "$1$authType")
                     if (!text.contains(Regex("""(?m)^\s*transport:\s*"""))) {
-                        text = text.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  transport: both")
+                        text = text.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  transport: raknet")
                     } else {
-                        text = text.replace(Regex("""(?m)^(\s*transport:\s*)\w+"""), "$1both")
+                        text = text.replace(Regex("""(?m)^(\s*transport:\s*)\w+"""), "$1raknet")
                     }
                 }
                 configFile.writeText(text)
@@ -399,7 +399,7 @@ object ServerInstaller {
                     appendLine("  address: 0.0.0.0")
                     appendLine("  port: $effectiveGeyserPort")
                     appendLine("  clone-remote-port: false")
-                    appendLine("  transport: both")
+                    appendLine("  transport: raknet")
                     appendLine("  motd1: \"$cleanName\"")
                     appendLine("  motd2: \"MineDroid Bedrock Crossplay\"")
                     appendLine("remote:")

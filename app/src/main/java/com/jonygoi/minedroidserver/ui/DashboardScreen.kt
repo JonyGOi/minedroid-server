@@ -36,7 +36,8 @@ import kotlinx.coroutines.*
 fun DashboardScreen(
     onNavigateToConsole: () -> Unit,
     onNavigateToConfig: () -> Unit,
-    onNavigateToFiles: () -> Unit = {}
+    onNavigateToFiles: () -> Unit = {},
+    onNavigateToRemote: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -358,7 +359,7 @@ fun DashboardScreen(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(
-                    onClick = { showRemoteClientDialog = true },
+                    onClick = onNavigateToRemote,
                     modifier = Modifier
                         .size(38.dp)
                         .background(MinecraftCardSurface, RoundedCornerShape(10.dp))
@@ -1022,7 +1023,7 @@ fun DashboardScreen(
                                     }
 
                                     Button(
-                                        onClick = { showRemoteClientDialog = true },
+                                        onClick = onNavigateToRemote,
                                         shape = RoundedCornerShape(8.dp),
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                         modifier = Modifier.weight(1.2f).height(32.dp),

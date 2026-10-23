@@ -25,6 +25,7 @@ enum class AppTab(val title: String, val icon: ImageVector) {
     DASHBOARD("Servidores", Icons.Default.Dns),
     CONSOLE("Terminal", Icons.Default.Terminal),
     FILES("Arquivos", Icons.Default.Folder),
+    REMOTE("Remoto", Icons.Default.Devices),
     CONFIG("Configurar", Icons.Default.Settings),
     OPTIMIZATION("Otimizar", Icons.Default.Speed)
 }
@@ -108,10 +109,12 @@ fun MainApp() {
                 AppTab.DASHBOARD -> DashboardScreen(
                     onNavigateToConsole = { selectedTab = AppTab.CONSOLE },
                     onNavigateToConfig = { selectedTab = AppTab.CONFIG },
-                    onNavigateToFiles = { selectedTab = AppTab.FILES }
+                    onNavigateToFiles = { selectedTab = AppTab.FILES },
+                    onNavigateToRemote = { selectedTab = AppTab.REMOTE }
                 )
                 AppTab.CONSOLE -> ConsoleScreen()
                 AppTab.FILES -> FileManagerScreen()
+                AppTab.REMOTE -> RemoteScreen()
                 AppTab.CONFIG -> ServerConfigScreen(
                     onSaved = { selectedTab = AppTab.DASHBOARD }
                 )
