@@ -757,6 +757,33 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                         }
                     }
                 }
+
+                if (enableGeyser && enableFloodgate) {
+                    HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Criptografia Bedrock (Floodgate)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text(
+                            text = "Se jogadores Bedrock receberem 'Erro ao ler criptografia' (Tag mismatch), clique abaixo para redefinir as chaves de segurança.",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                val sDir = ServerInstaller.getServerDirectory(context, currentConfig.id)
+                                ServerInstaller.regenerateFloodgateKeys(sDir)
+                                Toast.makeText(context, "Chaves de criptografia redefinidas! O servidor irá gerar novas chaves idênticas ao iniciar.", Toast.LENGTH_LONG).show()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MinecraftDiamond),
+                            border = BorderStroke(1.dp, MinecraftDiamond.copy(alpha = 0.6f))
+                        ) {
+                            Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp), tint = MinecraftDiamond)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Reparar Chaves de Criptografia Bedrock", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
 

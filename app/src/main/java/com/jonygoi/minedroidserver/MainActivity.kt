@@ -24,10 +24,13 @@ import com.jonygoi.minedroidserver.ui.*
 enum class AppTab(val title: String, val icon: ImageVector) {
     DASHBOARD("Servidores", Icons.Default.Dns),
     CONSOLE("Terminal", Icons.Default.Terminal),
-    FILES("Arquivos", Icons.Default.Folder),
-    REMOTE("Remoto", Icons.Default.Devices),
     CONFIG("Configurar", Icons.Default.Settings),
     OPTIMIZATION("Otimizar", Icons.Default.Speed)
+}
+
+enum class SubScreen {
+    FILES,
+    REMOTE
 }
 
 class MainActivity : ComponentActivity() {
@@ -65,6 +68,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainApp() {
     var selectedTab by remember { mutableStateOf(AppTab.DASHBOARD) }
+    var activeSubScreen by remember { mutableStateOf<SubScreen?>(null) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -74,10 +78,13 @@ fun MainApp() {
                 contentColor = TextPrimary
             ) {
                 AppTab.values().forEach { tab ->
-                    val isSelected = selectedTab == tab
+                    val isSelected = selectedTab == tab && activeSubScreen == null
                     NavigationBarItem(
                         selected = isSelected,
-                        onClick = { selectedTab = tab },
+                        onClick = {
+                            selectedTab = tab
+                            activeSubScreen = null
+                        },
                         icon = {
                             Icon(
                                 imageVector = tab.icon,
@@ -105,20 +112,28 @@ fun MainApp() {
                 .background(MinecraftObsidian)
                 .padding(innerPadding)
         ) {
-            when (selectedTab) {
-                AppTab.DASHBOARD -> DashboardScreen(
-                    onNavigateToConsole = { selectedTab = AppTab.CONSOLE },
-                    onNavigateToConfig = { selectedTab = AppTab.CONFIG },
-                    onNavigateToFiles = { selectedTab = AppTab.FILES },
-                    onNavigateToRemote = { selectedTab = AppTab.REMOTE }
-                )
-                AppTab.CONSOLE -> ConsoleScreen()
-                AppTab.FILES -> FileManagerScreen()
-                AppTab.REMOTE -> RemoteScreen()
-                AppTab.CONFIG -> ServerConfigScreen(
-                    onSaved = { selectedTab = AppTab.DASHBOARD }
-                )
-                AppTab.OPTIMIZATION -> OptimizationScreen()
+            if (activeSubScreen != null) {
+                when (activeSubScreen) {
+                    SubScreen.FILES -> FileManagerScreen(
+                        onBack = { activeSubScreen = null }
+                    )
+                    SubScreen.REMOTE -> RemoteScreen()
+                    null -> {}
+                }
+            } else {
+                when (selectedTab) {
+                    AppTab.DASHBOARD -> DashboardScreen(
+                        onNavigateToConsole = { selectedTab = AppTab.CONSOLE },
+                        onNavigateToConfig = { selectedTab = AppTab.CONFIG },
+                        onNavigateToFiles = { activeSubScreen = SubScreen.FILES },
+                        onNavigateToRemote = { activeSubScreen = SubScreen.REMOTE }
+                    )
+                    AppTab.CONSOLE -> ConsoleScreen()
+                    AppTab.CONFIG -> ServerConfigScreen(
+                        onSaved = { selectedTab = AppTab.DASHBOARD }
+                    )
+                    AppTab.OPTIMIZATION -> OptimizationScreen()
+                }
             }
         }
     }

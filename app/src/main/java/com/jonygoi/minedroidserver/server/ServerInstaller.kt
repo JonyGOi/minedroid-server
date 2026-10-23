@@ -288,7 +288,7 @@ object ServerInstaller {
         propsFile.writeText(content)
     }
 
-    fun ensureFloodgateKey(serverDir: File, config: ServerConfig) {
+    fun ensureFloodgateKey(serverDir: File, config: ServerConfig = ServerConfig(), forceRegenerate: Boolean = false) {
         try {
             val pluginsDir = File(serverDir, "plugins")
             val floodgateDir = File(pluginsDir, "floodgate")
@@ -298,9 +298,14 @@ object ServerInstaller {
             val geyserKey = File(geyserDir, "key.pem")
             val rootKey = File(serverDir, "key.pem")
 
+            if (forceRegenerate) {
+                listOf(floodgateKey, geyserKey, rootKey).forEach { if (it.exists()) it.delete() }
+                return
+            }
+
             // 1. Limpeza de chaves corrompidas ou inválidas:
-            // Chaves geradas anteriormente com 32 bytes aleatórios não possuem o cabeçalho '-----BEGIN'
-            // do padrão PKCS#8 e causam erro 'AEADBadTagException' / 'Erro ao ler criptografia' no Bedrock.
+            // Chaves corrompidas ou sem cabeçalho PKCS#8 '-----BEGIN' causam erro 'AEADBadTagException'
+            // ou 'Erro ao ler criptografia' no Minecraft Bedrock.
             listOf(floodgateKey, geyserKey, rootKey).forEach { keyFile ->
                 if (keyFile.exists()) {
                     val content = try { keyFile.readText() } catch (_: Exception) { "" }
@@ -310,21 +315,38 @@ object ServerInstaller {
                 }
             }
 
-            // 2. Se a chave nativa do Floodgate já foi gerada e é válida, sincroniza com o Geyser
-            if (floodgateKey.exists()) {
-                val validText = try { floodgateKey.readText() } catch (_: Exception) { "" }
-                if (validText.contains("-----BEGIN")) {
-                    if (!geyserDir.exists()) geyserDir.mkdirs()
-                    if (!geyserKey.exists() || geyserKey.length() == 0L) {
-                        geyserKey.writeText(validText)
-                    }
+            // 2. Sincronização estrita de chaves criptográficas (Floodgate <-> Geyser):
+            // O Geyser e o Floodgate PRECISAM ter exatamente os mesmos bytes na chave key.pem,
+            // caso contrário o Floodgate não consegue decifrar os pacotes de handshake do jogador Bedrock.
+            val validFloodgate = floodgateKey.exists() && floodgateKey.readText().contains("-----BEGIN")
+            val validGeyser = geyserKey.exists() && geyserKey.readText().contains("-----BEGIN")
+
+            if (validFloodgate) {
+                val fBytes = floodgateKey.readBytes()
+                if (!geyserDir.exists()) geyserDir.mkdirs()
+                if (!geyserKey.exists() || !geyserKey.readBytes().contentEquals(fBytes)) {
+                    geyserKey.writeBytes(fBytes)
+                }
+                if (!rootKey.exists() || !rootKey.readBytes().contentEquals(fBytes)) {
+                    rootKey.writeBytes(fBytes)
+                }
+            } else if (validGeyser) {
+                val gBytes = geyserKey.readBytes()
+                if (!floodgateDir.exists()) floodgateDir.mkdirs()
+                if (!floodgateKey.exists() || !floodgateKey.readBytes().contentEquals(gBytes)) {
+                    floodgateKey.writeBytes(gBytes)
+                }
+                if (!rootKey.exists() || !rootKey.readBytes().contentEquals(gBytes)) {
+                    rootKey.writeBytes(gBytes)
                 }
             }
-            // OBS: Não criamos strings falsas se a chave não existir.
-            // O próprio plugin Floodgate gera seu par criptográfico PKCS#8 válido na inicialização.
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun regenerateFloodgateKeys(serverDir: File) {
+        ensureFloodgateKey(serverDir, ServerConfig(), forceRegenerate = true)
     }
 
     fun setupGeyserConfig(serverDir: File, config: ServerConfig) {
@@ -367,6 +389,12 @@ object ServerInstaller {
                         updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*clone-remote-port:\s*)true"""), "$1false")
                     }
 
+                    if (!updatedBedrock.contains("broadcast-port:")) {
+                        updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*port:\s*\d+)"""), "$1\n  broadcast-port: $effectiveGeyserPort")
+                    } else {
+                        updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*broadcast-port:\s*)\d+"""), "$1$effectiveGeyserPort")
+                    }
+
                     if (!updatedBedrock.contains(Regex("""(?m)^\s*transport:\s*"""))) {
                         if (updatedBedrock.contains("clone-remote-port:")) {
                             updatedBedrock = updatedBedrock.replace(Regex("""(?m)^(\s*clone-remote-port:\s*\w+)"""), "$1\n  transport: raknet")
@@ -398,6 +426,7 @@ object ServerInstaller {
                     appendLine("bedrock:")
                     appendLine("  address: 0.0.0.0")
                     appendLine("  port: $effectiveGeyserPort")
+                    appendLine("  broadcast-port: $effectiveGeyserPort")
                     appendLine("  clone-remote-port: false")
                     appendLine("  transport: raknet")
                     appendLine("  motd1: \"$cleanName\"")
