@@ -81,6 +81,7 @@ fun DashboardScreen(
     }
 
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showRemoteClientDialog by remember { mutableStateOf(false) }
     var serverToDelete by remember { mutableStateOf<ServerConfig?>(null) }
     var playitSessionToConfirm by remember { mutableStateOf<PlayitClaimSession?>(null) }
     var isExchangingPlayit by remember { mutableStateOf(false) }
@@ -93,6 +94,13 @@ fun DashboardScreen(
     val savedSecret = remember(playitSessionToConfirm, isPlayitRunning) { PlayitManager.getSavedSecretKey(context) }
     val isRunning = state == ServerState.RUNNING
     val isStarting = state == ServerState.STARTING || state == ServerState.PREPARING || state == ServerState.DOWNLOADING
+
+    // Dialog: Conectar a Celular Remoto
+    if (showRemoteClientDialog) {
+        RemoteClientDialog(
+            onDismissRequest = { showRemoteClientDialog = false }
+        )
+    }
 
     // Dialog: Criar Novo Servidor
     if (showCreateDialog) {
@@ -348,15 +356,32 @@ fun DashboardScreen(
                 )
             }
 
-            Button(
-                onClick = { showCreateDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
-                shape = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Novo Servidor", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { showRemoteClientDialog = true },
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(MinecraftCardSurface, RoundedCornerShape(10.dp))
+                        .border(1.dp, MinecraftBorder, RoundedCornerShape(10.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Devices,
+                        contentDescription = "Acessar Celular Remoto",
+                        tint = MinecraftDiamond,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Button(
+                    onClick = { showCreateDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = MinecraftEmerald),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = MinecraftObsidian, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Novo Servidor", color = MinecraftObsidian, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
             }
         }
 
@@ -756,6 +781,44 @@ fun DashboardScreen(
                                     }
                                 }
 
+                                HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
+
+                                // Dica: Jogando neste mesmo celular (Host Local)
+                                Surface(
+                                    color = MinecraftDarkSurface.copy(alpha = 0.6f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, MinecraftBorder.copy(alpha = 0.6f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Info, contentDescription = null, tint = MinecraftDiamond, modifier = Modifier.size(14.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Jogando neste mesmo celular (Host Local):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MinecraftDiamond)
+                                        }
+                                        Text(
+                                            text = "O Android bloqueia conexão com o túnel externo no próprio aparelho. Para jogar neste celular, use IP: 127.0.0.1 e Porta: ${s.geyserPort} (Bedrock) ou ${s.serverPort} (Java).",
+                                            fontSize = 10.sp,
+                                            color = TextSecondary,
+                                            lineHeight = 14.sp
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    copyToClipboard(context, "127.0.0.1:${s.geyserPort}")
+                                                    Toast.makeText(context, "Copiado: 127.0.0.1:${s.geyserPort}", Toast.LENGTH_SHORT).show()
+                                                },
+                                                shape = RoundedCornerShape(6.dp),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(26.dp),
+                                                border = BorderStroke(1.dp, MinecraftBorder)
+                                            ) {
+                                                Text("📋 Copiar 127.0.0.1:${s.geyserPort}", fontSize = 10.sp, color = MinecraftEmerald)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 // Status do Túnel Playit.gg
                                 if (s.enablePlayitTunnel) {
                                     HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
@@ -830,6 +893,145 @@ fun DashboardScreen(
                                                 Text("Vincular Conta", color = MinecraftDiamond, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
                                         }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Card de Acesso Remoto (Web & Outros Aparelhos)
+                        val remoteUrl by com.jonygoi.minedroidserver.remote.RemoteWebServer.serverUrl.collectAsState()
+                        Surface(
+                            color = MinecraftCardSurface,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MinecraftBorder),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Devices,
+                                            contentDescription = null,
+                                            tint = MinecraftEmerald,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Acesso Remoto (Web & Outros Celulares)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                    }
+                                    Surface(
+                                        color = MinecraftEmerald.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(20.dp),
+                                        border = BorderStroke(1.dp, MinecraftEmerald.copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = "Ativo",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MinecraftEmerald,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "Acesse este celular pelo navegador de outro dispositivo (celular/PC) ou conecte-se a ele pelo app:",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+
+                                val displayUrl = remoteUrl ?: "http://127.0.0.1:8080"
+                                Surface(
+                                    color = MinecraftDarkSurface,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, MinecraftBorder),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = displayUrl,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MinecraftEmerald,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Row {
+                                            IconButton(
+                                                onClick = { copyToClipboard(context, displayUrl) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextSecondary, modifier = Modifier.size(15.dp))
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(displayUrl)).apply {
+                                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        }
+                                                        context.startActivity(intent)
+                                                    } catch (_: Exception) {}
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Default.OpenInBrowser, contentDescription = "Abrir", tint = MinecraftEmerald, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_SUBJECT, "Painel Remoto MineDroid")
+                                                    putExtra(Intent.EXTRA_TEXT, "Acesse o painel do servidor pelo navegador: $displayUrl")
+                                                }
+                                                context.startActivity(Intent.createChooser(shareIntent, "Compartilhar Painel Remoto"))
+                                            } catch (_: Exception) {}
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.weight(1f).height(32.dp),
+                                        border = BorderStroke(1.dp, MinecraftBorder)
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp), tint = TextSecondary)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Compartilhar", fontSize = 11.sp, color = TextSecondary)
+                                    }
+
+                                    Button(
+                                        onClick = { showRemoteClientDialog = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.weight(1.2f).height(32.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MinecraftCardSurface),
+                                        border = BorderStroke(1.dp, MinecraftBorder)
+                                    ) {
+                                        Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(14.dp), tint = MinecraftDiamond)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Conectar a outro", fontSize = 11.sp, color = TextPrimary)
                                     }
                                 }
                             }

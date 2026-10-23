@@ -41,6 +41,9 @@ class MainActivity : ComponentActivity() {
         // Initialize server registry
         ServerManager.init(this)
 
+        // Initialize and start Remote Web Server for cross-device host management
+        com.jonygoi.minedroidserver.remote.RemoteWebServer.start(this)
+
         // Check & request notification permission for Foreground Service on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)

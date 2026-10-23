@@ -31,6 +31,7 @@ class MinecraftServerService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 acquireLocks()
+                com.jonygoi.minedroidserver.remote.RemoteWebServer.start(this)
                 val serverName = ServerManager.getActiveConfig()?.name ?: "Minecraft"
                 val notification = buildNotification("Servidor '$serverName' Ativo")
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

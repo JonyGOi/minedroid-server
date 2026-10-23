@@ -219,6 +219,20 @@ object ServerInstaller {
                 }
             } catch (_: Exception) {}
 
+            // Garante que enforce-secure-profile=false esteja desativado em server.properties
+            // para permitir a conexão criptografada de jogadores Bedrock sem chaves Mojang Java
+            try {
+                val propsFile = File(serverDir, "server.properties")
+                if (propsFile.exists()) {
+                    var pText = propsFile.readText()
+                    if (pText.contains("enforce-secure-profile=true")) {
+                        propsFile.writeText(pText.replace("enforce-secure-profile=true", "enforce-secure-profile=false"))
+                    } else if (!pText.contains("enforce-secure-profile")) {
+                        propsFile.appendText("\nenforce-secure-profile=false\n")
+                    }
+                }
+            } catch (_: Exception) {}
+
             onProgress("Tudo pronto para iniciar!", 1.0f)
             true
         } catch (e: Exception) {
@@ -230,6 +244,19 @@ object ServerInstaller {
 
     private fun writeServerProperties(serverDir: File, config: ServerConfig) {
         val propsFile = File(serverDir, "server.properties")
+        if (propsFile.exists()) {
+            try {
+                var pText = propsFile.readText()
+                if (pText.contains("enforce-secure-profile=true")) {
+                    pText = pText.replace("enforce-secure-profile=true", "enforce-secure-profile=false")
+                } else if (!pText.contains("enforce-secure-profile")) {
+                    pText += "\nenforce-secure-profile=false\n"
+                }
+                propsFile.writeText(pText)
+            } catch (_: Exception) {}
+            return
+        }
+
         val content = StringBuilder().apply {
             appendLine("# Minecraft server properties - Gerado por MineDroid Server")
             appendLine("server-port=${config.serverPort}")
@@ -237,6 +264,7 @@ object ServerInstaller {
             appendLine("motd=${config.motd}")
             appendLine("max-players=${config.maxPlayers}")
             appendLine("online-mode=${config.onlineMode}")
+            appendLine("enforce-secure-profile=false")
             appendLine("pvp=${config.pvp}")
             appendLine("difficulty=${config.difficulty}")
             appendLine("gamemode=${config.gamemode}")
@@ -256,30 +284,44 @@ object ServerInstaller {
             appendLine("simulation-distance=${config.simulationDistance}")
             appendLine("sync-chunk-writes=false")
             appendLine("network-compression-threshold=256")
-            appendLine("transport=raknet")
         }.toString()
         propsFile.writeText(content)
     }
 
     fun ensureFloodgateKey(serverDir: File, config: ServerConfig) {
         try {
-            val keyBytes = ByteArray(32)
-            java.security.SecureRandom().nextBytes(keyBytes)
-            val base64Key = java.util.Base64.getEncoder().encodeToString(keyBytes) + "\n"
-
-            val targetDirs = mutableListOf<File>()
-            targetDirs.add(serverDir)
             val pluginsDir = File(serverDir, "plugins")
-            targetDirs.add(File(pluginsDir, "Geyser-Spigot"))
-            targetDirs.add(File(pluginsDir, "floodgate"))
+            val floodgateDir = File(pluginsDir, "floodgate")
+            val geyserDir = File(pluginsDir, "Geyser-Spigot")
 
-            for (dir in targetDirs) {
-                if (!dir.exists()) dir.mkdirs()
-                val keyFile = File(dir, "key.pem")
-                if (!keyFile.exists() || keyFile.length() == 0L) {
-                    keyFile.writeText(base64Key)
+            val floodgateKey = File(floodgateDir, "key.pem")
+            val geyserKey = File(geyserDir, "key.pem")
+            val rootKey = File(serverDir, "key.pem")
+
+            // 1. Limpeza de chaves corrompidas ou inválidas:
+            // Chaves geradas anteriormente com 32 bytes aleatórios não possuem o cabeçalho '-----BEGIN'
+            // do padrão PKCS#8 e causam erro 'AEADBadTagException' / 'Erro ao ler criptografia' no Bedrock.
+            listOf(floodgateKey, geyserKey, rootKey).forEach { keyFile ->
+                if (keyFile.exists()) {
+                    val content = try { keyFile.readText() } catch (_: Exception) { "" }
+                    if (!content.contains("-----BEGIN")) {
+                        keyFile.delete()
+                    }
                 }
             }
+
+            // 2. Se a chave nativa do Floodgate já foi gerada e é válida, sincroniza com o Geyser
+            if (floodgateKey.exists()) {
+                val validText = try { floodgateKey.readText() } catch (_: Exception) { "" }
+                if (validText.contains("-----BEGIN")) {
+                    if (!geyserDir.exists()) geyserDir.mkdirs()
+                    if (!geyserKey.exists() || geyserKey.length() == 0L) {
+                        geyserKey.writeText(validText)
+                    }
+                }
+            }
+            // OBS: Não criamos strings falsas se a chave não existir.
+            // O próprio plugin Floodgate gera seu par criptográfico PKCS#8 válido na inicialização.
         } catch (e: Exception) {
             e.printStackTrace()
         }
