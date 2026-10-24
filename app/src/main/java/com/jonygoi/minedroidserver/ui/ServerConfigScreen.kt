@@ -759,62 +759,97 @@ fun ServerConfigScreen(onSaved: () -> Unit) {
                     }
                 }
 
-                if (enableGeyser && enableFloodgate) {
+                if (enableGeyser) {
                     HorizontalDivider(color = MinecraftBorder.copy(alpha = 0.5f))
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Criptografia Bedrock (Floodgate)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                        Text(
-                            text = "Se jogadores Bedrock receberem 'Erro ao ler criptografia' (Tag mismatch), clique abaixo para redefinir as chaves de segurança.",
-                            fontSize = 11.sp,
-                            color = TextSecondary
-                        )
-                        OutlinedButton(
-                            onClick = {
-                                val sDir = ServerInstaller.getServerDirectory(context, currentConfig.id)
-                                ServerInstaller.regenerateFloodgateKeys(sDir)
-                                Toast.makeText(context, "Chaves de criptografia redefinidas! O servidor irá gerar novas chaves idênticas ao iniciar.", Toast.LENGTH_LONG).show()
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MinecraftDiamond),
-                            border = BorderStroke(1.dp, MinecraftDiamond.copy(alpha = 0.6f))
-                        ) {
-                            Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp), tint = MinecraftDiamond)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Reparar Chaves de Criptografia Bedrock", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (enableFloodgate) "Floodgate (Exige Conta Microsoft no Bedrock)" else "Modo Bedrock Offline / Pirata",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = if (enableFloodgate) "Autentica jogadores Bedrock via Microsoft/Xbox." else "Desativa checagem Microsoft no Bedrock, permitindo qualquer versão/APK entrar sem erro de criptografia.",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
                         }
+                        Switch(
+                            checked = enableFloodgate,
+                            onCheckedChange = { enableFloodgate = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = MinecraftObsidian, checkedTrackColor = MinecraftEmerald)
+                        )
+                    }
 
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Protocolo de Transporte Bedrock (NetherNet / RakNet)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                        Text(
-                            text = "O Playit.gg opera via RakNet (UDP). Caso queira desativar o aviso do console e testar o NetherNet diretamente, selecione abaixo:",
-                            fontSize = 11.sp,
-                            color = TextSecondary
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = geyserTransport == "raknet",
-                                onClick = { geyserTransport = "raknet" },
-                                label = { Text("RakNet (Recomendado Playit)") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MinecraftEmerald,
-                                    selectedLabelColor = MinecraftObsidian,
-                                    containerColor = MinecraftCardSurface,
-                                    labelColor = TextPrimary
-                                )
+                    if (enableFloodgate) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Criptografia Bedrock (Floodgate)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text(
+                                text = "Se jogadores Bedrock receberem 'Erro ao ler criptografia' (Tag mismatch), clique abaixo para redefinir as chaves de segurança.",
+                                fontSize = 11.sp,
+                                color = TextSecondary
                             )
-                            FilterChip(
-                                selected = geyserTransport == "nethernet",
-                                onClick = { geyserTransport = "nethernet" },
-                                label = { Text("NetherNet") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MinecraftEmerald,
-                                    selectedLabelColor = MinecraftObsidian,
-                                    containerColor = MinecraftCardSurface,
-                                    labelColor = TextPrimary
-                                )
-                            )
+                            OutlinedButton(
+                                onClick = {
+                                    val sDir = ServerInstaller.getServerDirectory(context, currentConfig.id)
+                                    ServerInstaller.regenerateFloodgateKeys(sDir)
+                                    Toast.makeText(context, "Chaves de criptografia redefinidas! O servidor irá gerar novas chaves idênticas ao iniciar.", Toast.LENGTH_LONG).show()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MinecraftDiamond),
+                                border = BorderStroke(1.dp, MinecraftDiamond.copy(alpha = 0.6f))
+                            ) {
+                                Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp), tint = MinecraftDiamond)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Reparar Chaves de Criptografia Bedrock", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Protocolo de Transporte Bedrock", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text(
+                        text = "O Playit.gg opera via RakNet (UDP). Mantenha em RakNet para que o túnel Playit funcione com Bedrock.",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = geyserTransport == "raknet",
+                            onClick = { geyserTransport = "raknet" },
+                            label = { Text("RakNet (Recomendado Playit)") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MinecraftEmerald,
+                                selectedLabelColor = MinecraftObsidian,
+                                containerColor = MinecraftCardSurface,
+                                labelColor = TextPrimary
+                            )
+                        )
+                        FilterChip(
+                            selected = geyserTransport == "nethernet",
+                            onClick = { geyserTransport = "nethernet" },
+                            label = { Text("NetherNet") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MinecraftGold,
+                                selectedLabelColor = MinecraftObsidian,
+                                containerColor = MinecraftCardSurface,
+                                labelColor = TextPrimary
+                            )
+                        )
+                    }
+                    if (geyserTransport == "nethernet") {
+                        Text(
+                            text = "⚠️ ATENÇÃO: O túnel gratuito do Playit.gg NÃO suporta NetherNet (pois NetherNet requer sinalização TCP e o Playit Bedrock é apenas UDP). Para jogar via Playit.gg, selecione RakNet!",
+                            fontSize = 11.sp,
+                            color = MinecraftRedstone,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

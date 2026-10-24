@@ -11,8 +11,8 @@ android {
         applicationId = "com.jonygoi.minedroidserver"
         minSdk = 24
         targetSdk = 34
-        versionCode = 31
-        versionName = "1.8.5"
+        versionCode = 32
+        versionName = "1.8.6"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")

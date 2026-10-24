@@ -368,6 +368,7 @@ object ServerInstaller {
             val configFile = File(geyserDir, "config.yml")
             val authType = when {
                 config.serverType == ServerType.GEYSER_STANDALONE -> "offline"
+                !config.enableFloodgate -> "offline"
                 config.enableFloodgate -> "floodgate"
                 !config.onlineMode -> "offline"
                 else -> "online"

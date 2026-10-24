@@ -326,6 +326,9 @@ object ServerManager {
                 context = context,
                 onLog = { logMsg ->
                     addLog(logMsg)
+                    if (logMsg.text.contains("NetherNet support is NOT enabled", ignoreCase = true)) {
+                        addLog(LogMessage("[Playit.gg] ℹ️ O Playit.gg opera via UDP (RakNet). O aviso de NetherNet é apenas um informativo da Mojang e o RakNet é o protocolo correto para o Playit.", LogType.INFO))
+                    }
                     val domain = PlayitManager.parsePlayitDomainFromLog(logMsg.text)
                     if (domain != null) {
                         updateActiveServerDomain(domain)
